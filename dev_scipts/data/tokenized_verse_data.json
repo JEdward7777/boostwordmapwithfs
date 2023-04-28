@@ -1,0 +1,101 @@
+{
+  "sourceVerseText": [
+    {
+      "text": "βίβλος",
+      "strong": "G09760",
+      "morph": "Gr,N,,,,,NFS,",
+      "lemma": "βίβλος",
+      "position": 0,
+      "occurrence": 1,
+      "occurrences": 1,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 0
+    },
+    {
+      "text": "γενέσεως",
+      "strong": "G10780",
+      "morph": "Gr,N,,,,,GFS,",
+      "lemma": "γένεσις",
+      "position": 1,
+      "occurrence": 1,
+      "occurrences": 1,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 1
+    },
+    {
+      "text": "Ἰησοῦ",
+      "strong": "G24240",
+      "morph": "Gr,N,,,,,GMS,",
+      "lemma": "Ἰησοῦς",
+      "position": 2,
+      "occurrence": 1,
+      "occurrences": 1,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 2
+    },
+    {
+      "text": "Χριστοῦ",
+      "strong": "G55470",
+      "morph": "Gr,N,,,,,GMS,",
+      "lemma": "χριστός",
+      "position": 3,
+      "occurrence": 1,
+      "occurrences": 1,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 3
+    },
+    {
+      "text": "υἱοῦ",
+      "strong": "G52070",
+      "morph": "Gr,N,,,,,GMS,",
+      "lemma": "υἱός",
+      "position": 4,
+      "occurrence": 1,
+      "occurrences": 2,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 4
+    },
+    {
+      "text": "Δαυεὶδ",
+      "strong": "G11380",
+      "morph": "Gr,N,,,,,GMSI",
+      "lemma": "Δαυείδ",
+      "position": 5,
+      "occurrence": 1,
+      "occurrences": 1,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 5
+    },
+    {
+      "text": "υἱοῦ",
+      "strong": "G52070",
+      "morph": "Gr,N,,,,,GMS,",
+      "lemma": "υἱός",
+      "position": 6,
+      "occurrence": 2,
+      "occurrences": 2,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 6
+    },
+    {
+      "text": "Ἀβραάμ",
+      "strong": "G00110",
+      "morph": "Gr,N,,,,,GMSI",
+      "lemma": "Ἀβραάμ",
+      "position": 7,
+      "occurrence": 1,
+      "occurrences": 1,
+      "sentenceTokenLen": 8,
+      "sentenceCharLen": 46,
+      "index": 7
+    }
+  ],
+  "targetVerseText": "The book of the genealogy of Jesus Christ son of David son of Abraham"
+}
