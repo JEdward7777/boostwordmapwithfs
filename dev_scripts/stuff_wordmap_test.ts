@@ -45,10 +45,10 @@ function add_book_alignment_to_wordmap(excluded_verse: ChapterVerse, targetBook:
 
         for( const verse of Object.keys( bookJson ) ){
 
-            //skip the excluded_verse.
-            if( parseInt(verse) === excluded_verse.verse && chapter === excluded_verse.chapter ){
-                continue;
-            }
+            // //skip the excluded_verse.
+            // if( parseInt(verse) === excluded_verse.verse && chapter === excluded_verse.chapter ){
+            //     continue;
+            // }
 
             for( const a of chapter_alignments[verse].alignments ){
                 const topTokens: Token[] = a.topWords.map( (word) => {
