@@ -95,7 +95,7 @@ if (require.main === module) {
 
     const stats_collected = alignment_frequency_to_string( map );
 
-    fs.writeFile('./dev_scipts/data/alignment_memory_injection2.json', stats_collected, (err) => {
+    fs.writeFile('./dev_scripts/data/alignment_memory_injection2.json', stats_collected, (err) => {
         if (err) throw err;
         console.log('Data saved to file!');
     });
