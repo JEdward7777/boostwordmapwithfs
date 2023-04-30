@@ -157,25 +157,64 @@ export function convert_tc_to_token_dict( book_id: string, text: { [key: number]
     return result;
 }
 
+/**
+Converts the alignment data from the TranslationCore file format to the WordMap object structure.
+@param book_id A string used to identify the book, for example "mat".
+@param alignments The alignment data in the TranslationCore file format.
+@param source_tokens The converted tokens in the source language, used to supply source Tokens.
+@param target_tokens The converted tokens in the target language, used to supply target Tokens.
+@returns An object containing an array of Alignment objects in the WordMap object structure.
+*/
+export function convert_alignment_to_alignment_dict( book_id: string, alignments: { [key: number]: any}, source_tokens: { [key: string]: Token[] }, target_tokens: { [key: string]: Token[] } ): { [key: string]: Alignment[] }{
+    const result: {[key: string]: Alignment[]} = {};
+    Object.entries( alignments ).forEach( ([chapter_num,chapter_content]) => {
+        Object.entries( chapter_content ).forEach( ([verse_num,verse_content]) => {
+            const verse_key = `${book_id}_${chapter_num}:${verse_num}`;
 
-// export function run_normal_wordmap_predictions( target_text: { [key: number]: any }, source_text: { [key: number]: any }, map: WordMap): Suggestion[]{
+            if( verse_key in source_tokens && verse_key in target_tokens ){
 
-//     console.log( "hi" );
+                const source_verse_tokens : Token[] = source_tokens[verse_key];
+                const target_verse_tokens : Token[] = target_tokens[verse_key];
 
-//     //iterate through all the verses that are present in the target_text.
-//     const result = Object.entries(target_text).map(([chapter_number,chapter_content]) => {
+                let found_alignments : Alignment[] = [];
 
+                Object.entries( (verse_content as any).alignments ).forEach( ([alignment_num,alignment_content]) => {
 
+                    let found_top_words : Token[] = [];
+                    Object.entries( (alignment_content as any ).topWords ).forEach( ([_word_num,word_content] ) => {
+                        //try and find this word in the source_verse_tokens.
+                        source_verse_tokens.forEach( token => {
+                            //if( token.text != )
+                            if( token.toString() !== (word_content as any).word ) return;
+                            if( token.occurrences !== (word_content as any).occurrences ) return;
+                            if( token.occurrence !== (word_content as any).occurrence ) return;
 
+                            found_top_words.push( token );
+                        });
+                    });
+                    let found_bottom_words : Token[] = [];
+                    Object.entries( (alignment_content as any ).bottomWords ).forEach( ([word_num,word_content] ) => {
+                        //try and find this word in the target_verse_tokens.
+                        target_verse_tokens.forEach( token => {
+                            //if( token.text != )
+                            if( token.toString() !== (word_content as any).word ) return;
+                            if( token.occurrences !== (word_content as any).occurrences ) return;
+                            if( token.occurrence !== (word_content as any).occurrence ) return;
+                            found_bottom_words.push( token );
+                        });
+                    });
 
-//         //const compiled_verse_text_pair = compile_verse_text_pair( source_text, target_book, )
+                    found_alignments.push( new Alignment( new Ngram(found_top_words), new Ngram(found_bottom_words)));
 
-//         return new Suggestion();
-//     });
+                });
 
-//     return result;
+                result[verse_key] = found_alignments;
+            }
+        });
+    });
 
-// }
+    return result;    
+}
 
 function word_map_predict_tokens( m: WordMap, from_tokens: Token[], to_tokens: Token[], maxSuggestions: number = 1, minConfidence: number = 0.1 ): Suggestion[]{
     const engine_run = (m as any).engine.run( from_tokens, to_tokens );
