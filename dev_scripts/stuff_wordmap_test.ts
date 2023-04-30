@@ -34,12 +34,11 @@ class ChapterVerse {
 }
   
   
-function alignment_frequency_to_string( map: WordMap ){
-
-    return JSON.stringify({
+function extract_alignment_frequency( map: WordMap ): object{
+    return {
         'alignPermFreqIndex' : Array.from( (map as any).engine.alignmentMemoryIndex.permutationIndex.alignPermFreqIndex.index ),
         'srcNgramPermFreqIndex' : Array.from( (map as any).engine.alignmentMemoryIndex.permutationIndex.srcNgramPermFreqIndex.index ),
-        'tgtNgramPermFreqIndex' : Array.from( (map as any).engine.alignmentMemoryIndex.permutationIndex.tgtNgramPermFreqIndex.index ) }, null, 2);
+        'tgtNgramPermFreqIndex' : Array.from( (map as any).engine.alignmentMemoryIndex.permutationIndex.tgtNgramPermFreqIndex.index ) };
 }
 
 
@@ -99,18 +98,20 @@ function add_book_alignment_to_wordmap(excluded_verse: ChapterVerse, targetBook:
             // }
 
             for( const a of chapter_alignments[verse].alignments ){
-                const topTokens: Token[] = a.topWords.map( (word) => {
+                const topTokensNoOccurences: Token[] = a.topWords.map( (word) => {
                     const word_copy = Object.assign({}, word);
                     delete word_copy.word;
                     word_copy.text = word.word;
                     return new Token( word_copy ) 
                  });
-                const bottomTokens: Token[] = a.bottomWords.map( (word) => {
+                const bottomTokensNoOccurences: Token[] = a.bottomWords.map( (word) => {
                     const word_copy = Object.assign({}, word);
                     delete word_copy.word;
                     word_copy.text = word.word;
                     return new Token( word_copy ) 
                  });
+                const topTokens = tokenizeVerseObjects( topTokensNoOccurences );
+                const bottomTokens = tokenizeVerseObjects( bottomTokensNoOccurences );
 
                 const topNgram: Ngram = new Ngram( topTokens )
                 const bottomNgram: Ngram = new Ngram( bottomTokens )
@@ -205,22 +206,15 @@ if (require.main === module) {
     const map = new WordMap({ targetNgramLength: 5, warnings: false });
     const loaded_book      = load_book( "/home/lansford/translationCore/projects/en_ult_mat_book/mat" );
     const loaded_alignment = load_book( "/home/lansford/translationCore/projects/en_ult_mat_book/.apps/translationCore/alignmentData/mat")
+    const greek_bible      = load_json_zip( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/el-x-koine/bibles/ugnt/v0.30_Door43-Catalog/books.zip" )
 
     add_book_alignment_to_wordmap( new ChapterVerse(1, 1), loaded_book, loaded_alignment, map);
 
 
-    const stats_collected = alignment_frequency_to_string( map );
-
-    fs.writeFile('./dev_scripts/data/alignment_memory_injection2.json', stats_collected, (err) => {
-        if (err) throw err;
-        console.log('Data saved to file!');
-    });
-
-
-    const greek_bible = load_json_zip( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/el-x-koine/bibles/ugnt/v0.30_Door43-Catalog/books.zip" )
+    const stats_collected = extract_alignment_frequency( map );
+    saveJson(stats_collected, './dev_scripts/data/alignment_memory_injection2.json' );
 
     //now see if we can produce the same sourceVerseText and targetVerseText.
     const verseTextPair = compile_verse_text_pair( greek_bible.mat, loaded_book, new ChapterVerse(1, 1) );
-
     saveJson( verseTextPair, "./dev_scripts/data/tokenized_verse_data2.json" );
 }
