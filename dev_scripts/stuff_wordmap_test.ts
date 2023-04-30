@@ -7,28 +7,9 @@ import { Alignment, Ngram } from 'wordmap';
 import * as AdmZip from 'adm-zip';
 //import usfmjs from 'usfm-js';
 const usfmjs = require('usfm-js');
+import * as path from 'path';
 
-// import * as map_without_alignment from './map_without_alignment';
-// import * as map_with_catboost from './map_with_catboost';
-
-
-
-
-function load_book(folderPath: string): Map<number, any> {
-    const bookJsonMap: Map<number, any> = new Map();
-    for (let i = 1; ; i++) {
-        const filePath = `${folderPath}/${i}.json`;
-        if (!fs.existsSync(filePath)) {
-            break;
-        }
-        const jsonString = fs.readFileSync(filePath, "utf8");
-        const bookJson = JSON.parse(jsonString);
-        bookJsonMap.set(i, bookJson);
-    }
-    return bookJsonMap;
-}
   
-
 class ChapterVerse {
     constructor(public chapter: number, public verse: number) {}
 }
@@ -86,40 +67,43 @@ function tokenizeVerseObjects(words: any[]): Token[]{
     return completeTokens;
   };
 
-function add_book_alignment_to_wordmap(excluded_verse: ChapterVerse, targetBook: Map<number, any>, loaded_alignment: Map<number, any>, map: WordMap): void {
-    targetBook.forEach((bookJson, chapter) => {
-        const chapter_alignments = loaded_alignment.get(chapter);
+function add_book_alignment_to_wordmap(excluded_verse: ChapterVerse, targetBook: { [key: number]: any }, loaded_alignment: { [key: number]: any }, map: WordMap): void {
+    Object.entries(targetBook).forEach(([chapter, bookJson]) => {
+        if( !["headers", "manifest"].includes(chapter) ){ 
 
-        for( const verse of Object.keys( bookJson ) ){
+            const chapter_alignments = loaded_alignment[chapter];
 
-            // //skip the excluded_verse.
-            // if( parseInt(verse) === excluded_verse.verse && chapter === excluded_verse.chapter ){
-            //     continue;
-            // }
+            for( const verse of Object.keys( bookJson ) ){
 
-            for( const a of chapter_alignments[verse].alignments ){
-                const topTokensNoOccurences: Token[] = a.topWords.map( (word) => {
-                    const word_copy = Object.assign({}, word);
-                    delete word_copy.word;
-                    word_copy.text = word.word;
-                    return new Token( word_copy ) 
-                 });
-                const bottomTokensNoOccurences: Token[] = a.bottomWords.map( (word) => {
-                    const word_copy = Object.assign({}, word);
-                    delete word_copy.word;
-                    word_copy.text = word.word;
-                    return new Token( word_copy ) 
-                 });
-                const topTokens = tokenizeVerseObjects( topTokensNoOccurences );
-                const bottomTokens = tokenizeVerseObjects( bottomTokensNoOccurences );
+                // //skip the excluded_verse.
+                // if( parseInt(verse) === excluded_verse.verse && chapter === excluded_verse.chapter ){
+                //     continue;
+                // }
 
-                const topNgram: Ngram = new Ngram( topTokens )
-                const bottomNgram: Ngram = new Ngram( bottomTokens )
+                for( const a of chapter_alignments[verse].alignments ){
+                    const topTokensNoOccurences: Token[] = a.topWords.map( (word) => {
+                        const word_copy = Object.assign({}, word);
+                        delete word_copy.word;
+                        word_copy.text = word.word;
+                        return new Token( word_copy ) 
+                    });
+                    const bottomTokensNoOccurences: Token[] = a.bottomWords.map( (word) => {
+                        const word_copy = Object.assign({}, word);
+                        delete word_copy.word;
+                        word_copy.text = word.word;
+                        return new Token( word_copy ) 
+                    });
+                    const topTokens = tokenizeVerseObjects( topTokensNoOccurences );
+                    const bottomTokens = tokenizeVerseObjects( bottomTokensNoOccurences );
 
-                const new_allignment: Alignment = new Alignment( topNgram, bottomNgram );
+                    const topNgram: Ngram = new Ngram( topTokens )
+                    const bottomNgram: Ngram = new Ngram( bottomTokens )
 
-                if( topNgram.tokenLength && bottomNgram.tokenLength ){
-                    map.appendAlignmentMemory( new_allignment );
+                    const new_alignment: Alignment = new Alignment( topNgram, bottomNgram );
+
+                    if( topNgram.tokenLength && bottomNgram.tokenLength ){
+                        map.appendAlignmentMemory( new_alignment );
+                    }
                 }
             }
         }
@@ -174,9 +158,36 @@ function normalizeVerseText( verse_text_in: string ): string{
 }
 
 
+function recursive_json_load(filepath: string): JsonDict {
+    let contents: JsonDict = {};
+    const ext = path.extname(filepath);
+    
+    if (fs.statSync(filepath).isDirectory()) {
+        for (const sub_filename of fs.readdirSync(filepath)) {
+            const sub_filepath = path.join( filepath, sub_filename);
+            const recursive_result = recursive_json_load(sub_filepath);
+            if( Object.keys(recursive_result).length > 0 ){
+                const sub_ext = path.extname( sub_filename );
+                let sub_key = sub_filename;
+                if( [".json",".zip"].includes(sub_ext) ){
+                    sub_key = path.basename(sub_filename,sub_ext);
+                }
+                contents[sub_key] = recursive_result;
+            }
+        }
+    } else if (ext.toLowerCase() === '.zip') {
+        contents = load_json_zip(filepath);
+    } else if (ext.toLowerCase() === '.json') {
+    const fileContents = fs.readFileSync(filepath, 'utf8');
+        contents = JSON.parse(fileContents);
+    }
+    return contents;
+}
+
+
 function compile_verse_text_pair(
     greek_book: JsonDict,
-    loaded_book: Map<number, any>,
+    loaded_book: { [key: number]: any },
     selected_verse: ChapterVerse
 ): { sourceVerseText: any, targetVerseText: any } {
     const sourceVerseObjects = greek_book[selected_verse.chapter][selected_verse.verse].verseObjects.filter(
@@ -184,7 +195,7 @@ function compile_verse_text_pair(
     );
     const sourceVerseTextWithLocation = tokenizeVerseObjects(sourceVerseObjects);
   
-    const targetVerseText = loaded_book.get(selected_verse.chapter)?.[selected_verse.verse];
+    const targetVerseText = loaded_book[selected_verse.chapter]?.[selected_verse.verse];
     const normalizedTargetVerseText = normalizeVerseText( targetVerseText );
   
     return { sourceVerseText: sourceVerseTextWithLocation, targetVerseText: normalizedTargetVerseText };
@@ -204,9 +215,9 @@ if (require.main === module) {
 
 
     const map = new WordMap({ targetNgramLength: 5, warnings: false });
-    const loaded_book      = load_book( "/home/lansford/translationCore/projects/en_ult_mat_book/mat" );
-    const loaded_alignment = load_book( "/home/lansford/translationCore/projects/en_ult_mat_book/.apps/translationCore/alignmentData/mat")
-    const greek_bible      = load_json_zip( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/el-x-koine/bibles/ugnt/v0.30_Door43-Catalog/books.zip" )
+    const loaded_book      = recursive_json_load( "/home/lansford/translationCore/projects/en_ult_mat_book/mat" );
+    const loaded_alignment = recursive_json_load( "/home/lansford/translationCore/projects/en_ult_mat_book/.apps/translationCore/alignmentData/mat")
+    const greek_bible      = recursive_json_load( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/el-x-koine/bibles/ugnt/v0.30_Door43-Catalog/books.zip" )
 
     add_book_alignment_to_wordmap( new ChapterVerse(1, 1), loaded_book, loaded_alignment, map);
 
@@ -217,4 +228,6 @@ if (require.main === module) {
     //now see if we can produce the same sourceVerseText and targetVerseText.
     const verseTextPair = compile_verse_text_pair( greek_bible.mat, loaded_book, new ChapterVerse(1, 1) );
     saveJson( verseTextPair, "./dev_scripts/data/tokenized_verse_data2.json" );
+
+    console.log( "done" );
 }
