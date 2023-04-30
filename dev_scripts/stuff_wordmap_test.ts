@@ -18,7 +18,7 @@ if (require.main === module) {
     const loaded_alignment = recursive_json_load( "/home/lansford/translationCore/projects/en_ult_mat_book/.apps/translationCore/alignmentData/mat")
     const greek_bible      = recursive_json_load( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/el-x-koine/bibles/ugnt/v0.30_Door43-Catalog/books.zip" )
 
-    add_book_alignment_to_wordmap( new ChapterVerse(1, 1), loaded_book, loaded_alignment, map);
+    add_book_alignment_to_wordmap( loaded_book, loaded_alignment, map);
 
 
     const stats_collected = extract_alignment_frequency( map );
