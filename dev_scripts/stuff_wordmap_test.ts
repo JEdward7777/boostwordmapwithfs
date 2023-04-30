@@ -42,6 +42,51 @@ function alignment_frequency_to_string( map: WordMap ){
         'tgtNgramPermFreqIndex' : Array.from( (map as any).engine.alignmentMemoryIndex.permutationIndex.tgtNgramPermFreqIndex.index ) }, null, 2);
 }
 
+
+/**
+ * Converts verse objects (as in from the source language verse) into {@link Token}s.
+ * @param verseObjects An array of VerseObject.
+ * @returns An array of Token.
+ */
+function tokenizeVerseObjects(words: any[]): Token[]{
+    const tokens: Token[] = [];
+    const completeTokens: Token[] = []; // includes occurrences
+    const occurrences: { [key: string]: number } = {};
+    let position = 0;
+    let sentenceCharLength = 0;
+    for (const word of words) {
+      if (typeof occurrences[word.text] === 'undefined') {
+        occurrences[word.text] = 0;
+      }
+      sentenceCharLength += word.text.length;
+      occurrences[word.text]++;
+      tokens.push( new Token({
+        text: word.text,
+        strong: (word.strong || word.strongs),
+        morph: word.morph,
+        lemma: word.lemma,
+        position: position,
+        occurrence: occurrences[word.text]
+      }));
+      position++;
+    }
+    // inject occurrences
+    for (const token of tokens) {
+      completeTokens.push(new Token({
+        text: (token as any).text,
+        strong: token.strong,
+        morph: token.morph,
+        lemma: token.lemma,
+        position: token.position,
+        occurrence: token.occurrence,
+        occurrences: occurrences[(token as any).text],
+        sentenceTokenLen: tokens.length,
+        sentenceCharLen: sentenceCharLength
+      }));
+    }
+    return completeTokens;
+  };
+
 function add_book_alignment_to_wordmap(excluded_verse: ChapterVerse, targetBook: Map<number, any>, loaded_alignment: Map<number, any>, map: WordMap): void {
     targetBook.forEach((bookJson, chapter) => {
         const chapter_alignments = loaded_alignment.get(chapter);
@@ -136,11 +181,12 @@ function compile_verse_text_pair(
     const sourceVerseObjects = greek_book[selected_verse.chapter][selected_verse.verse].verseObjects.filter(
         (verseObj: any) => verseObj.type === "word"
     );
+    const sourceVerseTextWithLocation = tokenizeVerseObjects(sourceVerseObjects);
   
     const targetVerseText = loaded_book.get(selected_verse.chapter)?.[selected_verse.verse];
     const normalizedTargetVerseText = normalizeVerseText( targetVerseText );
   
-    return { sourceVerseText: sourceVerseObjects, targetVerseText: normalizedTargetVerseText };
+    return { sourceVerseText: sourceVerseTextWithLocation, targetVerseText: normalizedTargetVerseText };
 }
 
 
