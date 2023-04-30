@@ -6,6 +6,8 @@
   "dependencies": {
     "fs-extra": "4.0.3",
     "wordmap": "0.8.2",
-    "wordmap-lexer": "0.3.6"
+    "wordmap-lexer": "0.3.6",
+    "adm-zip": "0.4.13",
+    "usfm-js": "3.4.2"
   }
 }

@@ -1,0 +1,75 @@
+{
+  "sourceVerseText": [
+    {
+      "text": "βίβλος",
+      "tag": "w",
+      "type": "word",
+      "lemma": "βίβλος",
+      "strong": "G09760",
+      "morph": "Gr,N,,,,,NFS,"
+    },
+    {
+      "text": "γενέσεως",
+      "tag": "w",
+      "type": "word",
+      "lemma": "γένεσις",
+      "strong": "G10780",
+      "morph": "Gr,N,,,,,GFS,"
+    },
+    {
+      "text": "Ἰησοῦ",
+      "tag": "w",
+      "type": "word",
+      "lemma": "Ἰησοῦς",
+      "strong": "G24240",
+      "morph": "Gr,N,,,,,GMS,",
+      "tw": "rc://*/tw/dict/bible/kt/jesus"
+    },
+    {
+      "text": "Χριστοῦ",
+      "tag": "w",
+      "type": "word",
+      "lemma": "χριστός",
+      "strong": "G55470",
+      "morph": "Gr,N,,,,,GMS,",
+      "tw": "rc://*/tw/dict/bible/kt/christ"
+    },
+    {
+      "text": "υἱοῦ",
+      "tag": "w",
+      "type": "word",
+      "lemma": "υἱός",
+      "strong": "G52070",
+      "morph": "Gr,N,,,,,GMS,",
+      "tw": "rc://*/tw/dict/bible/kt/son"
+    },
+    {
+      "text": "Δαυεὶδ",
+      "tag": "w",
+      "type": "word",
+      "lemma": "Δαυείδ",
+      "strong": "G11380",
+      "morph": "Gr,N,,,,,GMSI",
+      "tw": "rc://*/tw/dict/bible/names/david"
+    },
+    {
+      "text": "υἱοῦ",
+      "tag": "w",
+      "type": "word",
+      "lemma": "υἱός",
+      "strong": "G52070",
+      "morph": "Gr,N,,,,,GMS,",
+      "tw": "rc://*/tw/dict/bible/kt/son"
+    },
+    {
+      "text": "Ἀβραάμ",
+      "tag": "w",
+      "type": "word",
+      "lemma": "Ἀβραάμ",
+      "strong": "G00110",
+      "morph": "Gr,N,,,,,GMSI",
+      "tw": "rc://*/tw/dict/bible/names/abraham"
+    }
+  ],
+  "targetVerseText": "The book of the genealogy of Jesus Christ son of David son of Abraham"
+}
