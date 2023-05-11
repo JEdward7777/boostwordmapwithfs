@@ -191,8 +191,6 @@ export default class CatBoostWordMap extends WordMap{
     do_boost_training( correct_predictions: Prediction[], incorrect_predictions: Prediction[] ): Promise<string>{
         this.save_training_to_json( correct_predictions, incorrect_predictions, "./dev_scripts/catboost_training/catboost_training_data.json" );
 
-
-        console.log( "potato");
         //and now trigger a training by running a python command.
         return run_catboost_training( path.resolve("./dev_scripts/catboost_training/catboost_training_data.json"), 
                                 path.resolve("./dev_scripts/catboost_training/catboost_model.cbm" ) ).then()
@@ -233,29 +231,34 @@ export default class CatBoostWordMap extends WordMap{
         });
     }
 
-    // add_alignments_2( alignments: {[key: string]: Alignment[] }):void{
-    //     // 2 Do the alignment training with half of the verses included. Then add the remainder.
-    //     const alignments_split_a = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 === 0));
-    //     const alignments_split_b = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 !== 0));
+    add_alignments_2( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        // 2 Do the alignment training with half of the verses included. Then add the remainder.
+        const alignments_split_a = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 === 0));
+        const alignments_split_b = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 !== 0));
 
 
 
-    //     Object.entries(alignments_split_a).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
+        Object.entries(alignments_split_a).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
 
+        const [correct_predictions, incorrect_predictions] = this.collect_boost_training_data( source_text, target_text, alignments_split_b );
 
-    //     const boost_training_data = this.collect_boost_training_data( alignments_split_b );
+        Object.entries(alignments_split_b).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
 
-    //     Object.entries(alignments_split_b).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
-
-    //     this.do_boost_training(boost_training_data);
-    // }
+        return new Promise<void>((resolve, reject) => {
+            this.do_boost_training(correct_predictions, incorrect_predictions).then( (model_output_file) => {
+                this.load_model_file( model_output_file );
+                resolve();
+            }).catch( (error) => {
+                reject( error );
+            });
+        });
+    }
 
     add_alignments_3( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
         // 3 Do the alignment training with all the verses included already.
 
         Object.entries(alignments).forEach(([verseKey,verse_alignments]) => {
             this.appendAlignmentMemory( verse_alignments );
-            console.log("hi");
         });
 
 
@@ -263,12 +266,8 @@ export default class CatBoostWordMap extends WordMap{
 
 
         return new Promise<void>((resolve, reject) => {
-
-
             this.do_boost_training(correct_predictions, incorrect_predictions).then( (model_output_file) => {
-
                 this.load_model_file( model_output_file );
-
                 resolve();
             }).catch( (error) => {
                 reject( error );
@@ -277,27 +276,35 @@ export default class CatBoostWordMap extends WordMap{
     
     }
 
-    // add_alignments_4( alignments: {[key: string]: Alignment[] }):void{
-    //     // 4 Add the alignment memory for the first half and collect training data for the second half and then reverse to collect the trainnig data for the first half.
+    add_alignments_4( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        // 4 Add the alignment memory for the first half and collect training data for the second half and then reverse to collect the trainnig data for the first half.
 
-    //     //split the alignment data into two groups.
-    //     const alignments_split_a = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 === 0));
-    //     const alignments_split_b = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 !== 0));
+        //split the alignment data into two groups.
+        const alignments_split_a = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 === 0));
+        const alignments_split_b = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 !== 0));
 
-    //     //Add a and train on b
-    //     Object.entries(alignments_split_a).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
-    //     const boost_training_data_1 = this.collect_boost_training_data( alignments_split_b );
+        //Add a and train on b
+        Object.entries(alignments_split_a).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
+        const [correct_predictions_1, incorrect_predictions_1] = this.collect_boost_training_data( source_text, target_text, alignments_split_b );
 
-    //     this.clearAlignmentMemory();
+        this.clearAlignmentMemory();
 
-    //     //now add b and train on a
-    //     Object.entries(alignments_split_b).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
-    //     const boost_training_data_2 = this.collect_boost_training_data( alignments_split_b );
+        //now add b and train on a
+        Object.entries(alignments_split_b).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
+        const [correct_predictions_2, incorrect_predictions_2] = this.collect_boost_training_data( source_text, target_text, alignments_split_a );
 
-    //     //now train the model on both of them.
-    //     const boost_training_data = {...boost_training_data_1, ...boost_training_data_2 };
-    //     this.do_boost_training(boost_training_data);
-    // }
+        //now train the model on both of them.
+        const correct_predictions = correct_predictions_1.concat( correct_predictions_2);
+        const incorrect_predictions = incorrect_predictions_1.concat( incorrect_predictions_2 );
+        return new Promise<void>((resolve, reject) => {
+            this.do_boost_training(correct_predictions, incorrect_predictions).then( (model_output_file) => {
+                this.load_model_file( model_output_file );
+                resolve();
+            }).catch( (error) => {
+                reject( error );
+            });
+        });
+    }
 }
 
 
