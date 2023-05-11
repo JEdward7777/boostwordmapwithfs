@@ -71,6 +71,22 @@ export function recursive_json_load(filepath: string): JsonDict {
     return contents;
 }
 
+export function listToDictOfLists(list: {[key: string]: string}[]): {[key: string]: string[]} {
+    const dict: {[key: string]: string[]} = {};
+    
+    for (const item of list) {
+      for (const key in item) {
+        if (key in item) {
+          if (!(key in dict)) {
+            dict[key] = [];
+          }
+          dict[key].push(item[key]);
+        }
+      }
+    }
+    
+    return dict;
+  }
 
 
 export function saveJson(obj: object, path: string): void {

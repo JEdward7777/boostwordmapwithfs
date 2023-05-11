@@ -1,6 +1,6 @@
 import Lexer,{Token} from "wordmap-lexer";
 import WordMap from "wordmap";
-import { Alignment, Ngram, Suggestion, Engine } from 'wordmap';
+import { Alignment, Ngram, Suggestion, Prediction, Engine } from 'wordmap';
 //import usfmjs from 'usfm-js';
 const usfmjs = require('usfm-js');
 import {JsonDict} from "./json_tools";
@@ -223,6 +223,46 @@ export function word_map_predict_tokens( m: WordMap, from_tokens: Token[], to_to
     return suggestions;
 }
 
+export function is_correct_prediction( suggested_mapping: Prediction, manual_mappings: Alignment[] ): boolean{
+
+    mappingLoop: for( let manual_mapping_i = 0; manual_mapping_i < manual_mappings.length; ++manual_mapping_i ){
+        const manual_mapping = manual_mappings[manual_mapping_i];
+
+        const manual_mapping_source = manual_mapping.sourceNgram.getTokens();
+        const suggested_mapping_source = suggested_mapping.source.getTokens();
+        const manual_mapping_target = manual_mapping.targetNgram.getTokens();
+        const suggested_mapping_target = suggested_mapping.target.getTokens();
+
+        //see if the ngram on the suggestion are the same length
+        if( manual_mapping_source.length != suggested_mapping_source.length ) continue mappingLoop;
+        if( manual_mapping_target.length != suggested_mapping_target.length ) continue mappingLoop;
+
+        //now check the source ngram is the same.
+        for( let source_ngram_i = 0; source_ngram_i < manual_mapping_source.length; ++source_ngram_i ){
+            const manual_word = manual_mapping_source[source_ngram_i];
+            const suggested_word = suggested_mapping_source[source_ngram_i];
+
+            if( manual_word.toString()!= suggested_word.toString()  ) continue mappingLoop;
+            if( manual_word.occurrence  != suggested_word.occurrence  ) continue mappingLoop;
+            if( manual_word.occurrences != suggested_word.occurrences ) continue mappingLoop;
+        }
+
+        //and the target ngram.
+        for( let target_ngram_i = 0; target_ngram_i < manual_mapping_target.length; ++target_ngram_i ){
+            const manual_word = manual_mapping_target[target_ngram_i];
+            const suggested_word = suggested_mapping_target[target_ngram_i];
+
+            if( manual_word.toString()  != suggested_word.toString()  ) continue mappingLoop;
+            if( manual_word.occurrence  != suggested_word.occurrence  ) continue mappingLoop;
+            if( manual_word.occurrences != suggested_word.occurrences ) continue mappingLoop;
+        }
+
+        //We found this mapping so no need to keep looking for it.
+        return true;
+    }
+    return false;
+}
+
 export function grade_mapping_method( source_sentence_tokens_dict : { [key: string]: Token[] }, 
                                       target_sentence_tokens_dict : { [key: string]: Token[] },
                                     manual_mappings_dict: { [key: string]:  Alignment[] }, 
@@ -241,43 +281,9 @@ export function grade_mapping_method( source_sentence_tokens_dict : { [key: stri
             const firstPredictions = suggestions[0].getPredictions();
 
             let num_correct_mappings = 0;
-            mappingOuterLoop: for( let suggested_mapping_i = 0; suggested_mapping_i < firstPredictions.length; ++suggested_mapping_i ){
-                mappingLoop: for( let manual_mapping_i = 0; manual_mapping_i < manual_mappings.length; ++manual_mapping_i ){
-                    const suggested_mapping = firstPredictions[suggested_mapping_i];
-                    const manual_mapping = manual_mappings[manual_mapping_i];
-
-                    const manual_mapping_source = manual_mapping.sourceNgram.getTokens();
-                    const suggested_mapping_source = suggested_mapping.source.getTokens();
-                    const manual_mapping_target = manual_mapping.targetNgram.getTokens();
-                    const suggested_mapping_target = suggested_mapping.target.getTokens();
-
-                    //see if the ngram on the suggestion are the same length
-                    if( manual_mapping_source.length != suggested_mapping_source.length ) continue mappingLoop;
-                    if( manual_mapping_target.length != suggested_mapping_target.length ) continue mappingLoop;
-
-                    //now check the source ngram is the same.
-                    for( let source_ngram_i = 0; source_ngram_i < manual_mapping_source.length; ++source_ngram_i ){
-                        const manual_word = manual_mapping_source[source_ngram_i];
-                        const suggested_word = suggested_mapping_source[source_ngram_i];
-
-                        if( manual_word.toString()!= suggested_word.toString()  ) continue mappingLoop;
-                        if( manual_word.occurrence  != suggested_word.occurrence  ) continue mappingLoop;
-                        if( manual_word.occurrences != suggested_word.occurrences ) continue mappingLoop;
-                    }
-
-                    //and the target ngram.
-                    for( let target_ngram_i = 0; target_ngram_i < manual_mapping_target.length; ++target_ngram_i ){
-                        const manual_word = manual_mapping_target[target_ngram_i];
-                        const suggested_word = suggested_mapping_target[target_ngram_i];
-
-                        if( manual_word.toString()  != suggested_word.toString()  ) continue mappingLoop;
-                        if( manual_word.occurrence  != suggested_word.occurrence  ) continue mappingLoop;
-                        if( manual_word.occurrences != suggested_word.occurrences ) continue mappingLoop;
-                    }
-
+            for( let suggested_mapping_i = 0; suggested_mapping_i < firstPredictions.length; ++suggested_mapping_i ){
+                if( is_correct_prediction( firstPredictions[suggested_mapping_i], manual_mappings ) ){
                     num_correct_mappings++;
-                    //We found this mapping so no need to keep looking for it.
-                    continue mappingOuterLoop;
                 }
             }
             output_stream.write( `${sentence_key},${manual_mappings.length},${firstPredictions.length},${num_correct_mappings}\n`)
