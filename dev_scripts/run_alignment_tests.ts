@@ -5,7 +5,7 @@ import {ChapterVerse, add_book_alignment_to_wordmap, extract_alignment_frequency
 import WordMap, {Suggestion,Alignment} from "wordmap";
 import { createWriteStream } from 'fs';
 import {Token} from "wordmap-lexer";
-import {CatBoostWordMap, MorphCatBoostWordMap} from "./boostwordmap_tools";
+import {PlaneWordMap, CatBoostWordMap, MorphCatBoostWordMap} from "./boostwordmap_tools";
 
 
 function run_plane_wordmap_test(){
@@ -115,12 +115,12 @@ function loadSourceTargetData_Gen(): SourceTargetData{
 //const boostMap = new CatBoostWordMap({ targetNgramLength: 5, warnings: false });
 //const boostMap = new MorphCatBoostWordMap({ targetNgramLength: 5, warnings: false });
 
-function run_catboost_test_with_alignment_adding_method( data: SourceTargetData, boostMap: CatBoostWordMap, number_suffix: string, alignment_adder: (source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }) => Promise<void>){
+function run_catboost_test_with_alignment_adding_method( data: SourceTargetData, boostMap: PlaneWordMap, number_suffix: string, alignment_adder: (source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }) => Promise<void>){
 
 
     alignment_adder.call( boostMap, data.wm_source_lang_book, data.wm_target_lang_book__train, data.wm_alignment__train ).then(() => {
 
-        const output_csv = createWriteStream( `dev_scripts/data/mat_split_catboost_${number_suffix}.csv` );
+        const output_csv = createWriteStream( `dev_scripts/data/book_split_catboost_${number_suffix}.csv` );
 
         //function plane_wordmap_method( from_tokens: Token[], to_tokens: Token[] ) => Suggestion[]{
             // return word_map_predict_tokens( map, from_tokens, to_tokens );
@@ -144,7 +144,8 @@ function run_catboost_test_with_alignment_adding_method( data: SourceTargetData,
 }
 
 function run_configurable_wordmap_test( alignment_adding_method: number, boost_type: string, lang_selections: string, ratio_of_training_data: number ){
-    const boostMap = (boost_type === "morph_boost")?  new MorphCatBoostWordMap({ targetNgramLength: 5, warnings: false }):
+    const boostMap = (boost_type === "plane"      )?  new PlaneWordMap        ({ targetNgramLength: 5, warnings: false }):
+                     (boost_type === "morph_boost")?  new MorphCatBoostWordMap({ targetNgramLength: 5, warnings: false }):
                    /*(boost_type === "boost"      )?*/new CatBoostWordMap     ({ targetNgramLength: 5, warnings: false });
 
     boostMap.setTrainingRatio( ratio_of_training_data );
@@ -178,8 +179,9 @@ if (require.main === module) {
     //run_morph_catboost_wordmap_test_3();
     //run_morph_catboost_wordmap_test_4();
 
-    run_configurable_wordmap_test( 2, "morph_boost", "heb-english-gen", .1 )
+    // run_configurable_wordmap_test( 2, "plane", "heb-english-gen", .1 )
+    //run_configurable_wordmap_test( 2, "morph_boost", "heb-english-gen", .1 )
     run_configurable_wordmap_test( 2, "boost", "heb-english-gen", .1 )
-    run_configurable_wordmap_test( 2, "morph_boost", "greek-english-mat", .9 )
-    run_configurable_wordmap_test( 2, "boost", "greek-english-mat", .9 )
+    // run_configurable_wordmap_test( 2, "morph_boost", "greek-english-mat", .9 )
+    // run_configurable_wordmap_test( 2, "boost", "greek-english-mat", .9 )
 }

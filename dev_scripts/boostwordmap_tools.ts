@@ -121,7 +121,29 @@ function morph_prediction_to_catboost_features( prediction: Prediction ):[number
     return [numerical_features,cat_features];
 }
 
-export class CatBoostWordMap extends WordMap{
+//The point of this class is to make a way of interract with WordMap
+//which uses the same extended interface of the CatBoostWordMap interface.
+export class PlaneWordMap extends WordMap{
+    setTrainingRatio(ratio_of_training_data: number) { /*do nothing.*/ }
+
+    add_alignments_1( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        // In "plane" the different ways of adding are all the same.
+        Object.entries(alignments).forEach(([verseKey,verse_alignments]) => this.appendAlignmentMemory( verse_alignments ) );
+        //return a thin promise just so that we have the same api as the other.
+        return new Promise<void>(resolve => resolve());
+    }
+    add_alignments_2( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        return this.add_alignments_1( source_text, target_text, alignments );
+    }
+    add_alignments_3( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        return this.add_alignments_1( source_text, target_text, alignments );
+    }
+    add_alignments_4( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        return this.add_alignments_1( source_text, target_text, alignments );
+    }
+}
+
+export class CatBoostWordMap extends PlaneWordMap{
 
     protected catboost_model: catboost.Model | null = null;
     protected ratio_of_training_data: number = 1; //The ratio of how much data to use so we can thin data.
