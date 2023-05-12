@@ -32,7 +32,19 @@ export const catboost_feature_order : string[] = [
     "lemmaAlignmentOccurrences",
     "uniqueness",
     "lemmaUniqueness",
-]
+];
+
+
+export const catboost_cat_feature_order : string[] = [
+    "src_morph_0",
+    "src_morph_1",
+    "src_morph_2",
+    "src_morph_3",
+    "src_morph_4",
+    "src_morph_5",
+    "src_morph_6",
+    "src_morph_7",
+];
 
 function run_catboost_training( training_file: string, model_output_file: string ): Promise<string>{
     return new Promise<string>((resolve, reject) => {
@@ -69,15 +81,48 @@ function run_catboost_training( training_file: string, model_output_file: string
 }
 
 function scores_to_catboost_features( scores: {[key:string]:number} ){
-    const input_features_array = catboost_feature_order.map( (feature_name) => ( (scores[feature_name] === undefined)?0:scores[feature_name] ) );
-
-    const empty_categorical_features = Array(input_features_array.length).fill(0);
-
-    return [input_features_array,empty_categorical_features];
+    return catboost_feature_order.map( (feature_name) => ( (scores[feature_name] === undefined)?0:scores[feature_name] ) );
 }
 
-export default class CatBoostWordMap extends WordMap{
-    private catboost_model: catboost.Model | null = null;
+
+function morph_prediction_to_feature_dict( prediction: Prediction ): {[key:string]:(number|string)}{
+    const result: {[key: string]:number|string} = {};
+    const scores = prediction.getScores();
+    catboost_feature_order.forEach( key => {
+        result[key] = scores[key] ?? 0;
+    });
+
+    prediction.alignment.sourceNgram.getTokens().forEach( (token:Token) => {
+        token.morph.split(",").forEach( (morph_piece,morph_index) =>{
+            const categorical_key = `src_morph_${morph_index}`;
+            if( catboost_cat_feature_order.includes( categorical_key) ){
+                if( !(categorical_key in result) ){
+                    result[categorical_key] = ''
+                }
+    
+                result[categorical_key] += morph_piece;
+            }
+        });
+    });
+    catboost_cat_feature_order.forEach( key => {
+        if( !(key in result ) ){
+            result[key] = "";
+        }
+    })
+    return result;
+}
+function morph_prediction_to_catboost_features( prediction: Prediction ):[number[],string[]]{
+
+    const as_dict: {[key: string]:number|string} = morph_prediction_to_feature_dict(prediction);
+
+    const numerical_features : number[] = <number[]>catboost_feature_order.map( key => as_dict[key] ?? 0 );
+    const cat_features : string[] = <string[]>catboost_cat_feature_order.map( key => as_dict[key] ?? "" );
+
+    return [numerical_features,cat_features];
+}
+
+export class CatBoostWordMap extends WordMap{
+    protected catboost_model: catboost.Model | null = null;
 
     constructor(opts?: WordMapProps){
         super(opts);
@@ -90,8 +135,9 @@ export default class CatBoostWordMap extends WordMap{
 
     catboost_score( predictions: Prediction[]): Prediction[] { 
         for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
-            const [input_features_array,empty_categorical_features] = scores_to_catboost_features(predictions[prediction_i].getScores());
-            const confidence = this.catboost_model.predict( [input_features_array], [empty_categorical_features] )[0];
+            const input_features_array = scores_to_catboost_features(predictions[prediction_i].getScores());
+            //const confidence = this.catboost_model.predict( [input_features_array], [empty_categorical_features] )[0];
+            const confidence = this.catboost_model.predict( [input_features_array], [[0]] )[0];
             predictions[prediction_i].setScore("confidence", confidence);
         }
         //This is how non-catboost confidence calculation is done:
@@ -183,6 +229,7 @@ export default class CatBoostWordMap extends WordMap{
 
         saveJson( {
             "catboost_feature_order": catboost_feature_order,
+            "catboost_cat_feature_order": [],
             "training_data": listToDictOfLists(training_data),
         },  filename);
     }
@@ -310,3 +357,32 @@ export default class CatBoostWordMap extends WordMap{
 
 
 
+export class MorphCatBoostWordMap extends CatBoostWordMap{
+    catboost_score( predictions: Prediction[]): Prediction[] { 
+        for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
+            const [numerical_features,cat_features] = morph_prediction_to_catboost_features(predictions[prediction_i]);
+            const confidence = this.catboost_model.predict( [numerical_features], [cat_features] )[0];
+            predictions[prediction_i].setScore("confidence", confidence);
+        }
+        return Engine.sortPredictions(predictions);
+    }
+
+    save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
+        //first dump the data out to a json file
+        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: number|string}{
+            const result = morph_prediction_to_feature_dict(prediction);
+            result["output"] = is_correct?1:0;
+            return result;
+        };
+
+
+        const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
+            .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
+
+        saveJson( {
+            "catboost_feature_order": catboost_feature_order,
+            "catboost_cat_feature_order":catboost_cat_feature_order,
+            "training_data": listToDictOfLists(training_data),
+        },  filename);
+    }
+}

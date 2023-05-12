@@ -28,7 +28,7 @@ def main():
         json_data = json.load( fin )
 
 
-    X = pd.DataFrame( json_data['training_data'], columns=json_data['catboost_feature_order'] )
+    X = pd.DataFrame( json_data['training_data'], columns=json_data['catboost_feature_order']+json_data['catboost_cat_feature_order'] )
     y = pd.Series( json_data['training_data']['output'] )
 
     X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(
@@ -41,19 +41,29 @@ def main():
     y_train = y_train.reset_index(drop=True)
     y_test = y_test.reset_index(drop=True)
 
+    #The cat features come after the number featuers
+    #so the index of the cat features are an enumeration the length of the cat
+    #features offset by the number of numerical features.
+    cat_feature_indexes = []
+    for i in range(len(json_data['catboost_cat_feature_order'])):
+        cat_feature_indexes.append( i + len( json_data['catboost_feature_order'] ) )
+
     train_pool = Pool(
         data=X_train,
-        label=y_train
+        label=y_train,
+        cat_features=cat_feature_indexes
     )
     validation_pool = Pool(
         data=X_test,
-        label=y_test
+        label=y_test,
+        cat_features=cat_feature_indexes
     )
 
     cb_model = CatBoostRegressor(
         iterations=8000,
         #task_type="GPU",
-        learning_rate=.03
+        learning_rate=.03,
+        cat_features=cat_feature_indexes
     )
     cb_model.fit(train_pool, eval_set=validation_pool, verbose=True)
 

@@ -71,8 +71,8 @@ export function recursive_json_load(filepath: string): JsonDict {
     return contents;
 }
 
-export function listToDictOfLists(list: {[key: string]: string}[]): {[key: string]: string[]} {
-    const dict: {[key: string]: string[]} = {};
+export function listToDictOfLists(list: {[key: string]: number|string}[]): {[key: string]: (number|string)[]} {
+    const dict: {[key: string]: (number|string)[]} = {};
     
     for (const item of list) {
       for (const key in item) {
