@@ -91,10 +91,15 @@ function loadSourceTargetData_Gen(): SourceTargetData{
     const tc_target_lang_book  = recursive_json_load( "/home/lansford/translationCore/projects/en_ult_gen_book/gen" );
     const tc_source_lang_book  = recursive_json_load( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/hbo/bibles/uhb/v2.1.30_Door43-Catalog/books.zip" ).gen
 
+    //Hack these lemmas to be the same until I have further instruction.
+    //Them being different while the word is the same resulting in a 2 of 1 occurrence which bombs
+    //wordmap.
+    tc_source_lang_book[47][20].verseObjects[10].lemma = tc_source_lang_book[47][20].verseObjects[18].lemma
 
-    //only up to 47 is aligned.
-    const tc_target_lang_book__train = Object.fromEntries( Object.entries( tc_target_lang_book).filter(([key, value]) => !isNaN(Number(key)) && parseInt(key) <= 43 ) );
-    const tc_target_lang_book__test = Object.fromEntries( Object.entries( tc_target_lang_book).filter(([key, value]) => !isNaN(Number(key)) && parseInt(key) > 43 && parseInt(key) <= 47 ) );
+
+    //only up to 47 is manually aligned in the data.
+    const tc_target_lang_book__test = Object.fromEntries( Object.entries( tc_target_lang_book).filter(([key, value]) => !isNaN(Number(key)) && parseInt(key) <= 43 ) );
+    const tc_target_lang_book__train = Object.fromEntries( Object.entries( tc_target_lang_book).filter(([key, value]) => !isNaN(Number(key)) && parseInt(key) > 43 && parseInt(key) <= 47 ) );
 
     const bookName: string = "gen";
     const data = new SourceTargetData();
@@ -138,10 +143,11 @@ function run_catboost_test_with_alignment_adding_method( data: SourceTargetData,
     });
 }
 
-function run_configurable_wordmap_test( alignment_adding_method: number, boost_type: string, lang_selections: string ){
+function run_configurable_wordmap_test( alignment_adding_method: number, boost_type: string, lang_selections: string, ratio_of_training_data: number ){
     const boostMap = (boost_type === "morph_boost")?  new MorphCatBoostWordMap({ targetNgramLength: 5, warnings: false }):
                    /*(boost_type === "boost"      )?*/new CatBoostWordMap     ({ targetNgramLength: 5, warnings: false });
 
+    boostMap.setTrainingRatio( ratio_of_training_data );
 
     if( alignment_adding_method > 4 ) alignment_adding_method = 4;
     
@@ -172,8 +178,8 @@ if (require.main === module) {
     //run_morph_catboost_wordmap_test_3();
     //run_morph_catboost_wordmap_test_4();
 
-    run_configurable_wordmap_test( 2, "morph_boost", "heb-english-gen" )
-    run_configurable_wordmap_test( 2, "boost", "heb-english-gen" )
-    run_configurable_wordmap_test( 2, "morph_boost", "greek-english-mat" )
-    run_configurable_wordmap_test( 2, "boost", "greek-english-mat" )
+    run_configurable_wordmap_test( 2, "morph_boost", "heb-english-gen", .1 )
+    run_configurable_wordmap_test( 2, "boost", "heb-english-gen", .1 )
+    run_configurable_wordmap_test( 2, "morph_boost", "greek-english-mat", .9 )
+    run_configurable_wordmap_test( 2, "boost", "greek-english-mat", .9 )
 }

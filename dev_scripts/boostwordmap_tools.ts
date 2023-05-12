@@ -122,7 +122,13 @@ function morph_prediction_to_catboost_features( prediction: Prediction ):[number
 }
 
 export class CatBoostWordMap extends WordMap{
+
     protected catboost_model: catboost.Model | null = null;
+    protected ratio_of_training_data: number = 1; //The ratio of how much data to use so we can thin data.
+
+    setTrainingRatio(ratio_of_training_data: number) {
+        this.ratio_of_training_data = ratio_of_training_data;
+    }
 
     constructor(opts?: WordMapProps){
         super(opts);
@@ -193,7 +199,7 @@ export class CatBoostWordMap extends WordMap{
                 //If the prediction is correct, include it, if it isn't randomly include it.
                 if( is_correct_prediction( prediction, verse_alignments ) ){
                     correct_predictions.push( prediction );
-                }else if( Math.random() < ratio_of_incorrect_to_keep ){
+                }else if( Math.random() < ratio_of_incorrect_to_keep*this.ratio_of_training_data ){
                     incorrect_predictions.push( prediction );
                 }
             });
