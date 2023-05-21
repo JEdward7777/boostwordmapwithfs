@@ -1,4 +1,4 @@
-import { DataFrame, IDataFrame, ISeries } from "data-forge";
+import { DataFrame, IDataFrame, ISeries, Series } from "data-forge";
 
 let range = (n: number, offset: number) =>
   Array.from(Array(n).keys()).map((n) => n + offset);
@@ -158,7 +158,7 @@ export class JLBoost {
         for (const tree of this.trees) {
             const treePrediction = tree.predict(xy_data_ptr)
             output = output.map((value: number, index: number) => {
-                return value + treePrediction[index] * this.learning_rate;
+                return value + treePrediction.at(index) * this.learning_rate;
             });
         }
         return output;
@@ -200,7 +200,7 @@ export class JLBoost {
 
             const new_tree_output = new_tree.predict( xy_data_ptr );
             const new_output = current_output.map((value: number, index: number) => {
-                return value + new_tree_output[index] * this.learning_rate;
+                return value + new_tree_output.at(index) * this.learning_rate;
             });
 
             //const new_loss = Math.stdDev(xy_data[y_index] - new_output);
@@ -234,4 +234,39 @@ export class JLBoost {
 if (require.main === module) {
     //Do some tests of the module
 
+    const test_dataframe = new DataFrame([
+        { 'gender':0, 'age':2,  'y':0 },
+        { 'gender':1, 'age':3,  'y':0 },
+        { 'gender':0, 'age':6,  'y':0 },
+        { 'gender':1, 'age':7,  'y':0 },
+        { 'gender':1, 'age':9,  'y':0 },
+        { 'gender':0, 'age':12, 'y':.1 },
+        { 'gender':0, 'age':15, 'y':.3 },
+        { 'gender':1, 'age':16, 'y':9 },
+        { 'gender':0, 'age':16, 'y':1 },
+        { 'gender':0, 'age':18, 'y':10 },
+        { 'gender':1, 'age':18, 'y':8 },
+        { 'gender':0, 'age':20, 'y':7 },
+        { 'gender':0, 'age':21, 'y':7 },
+        { 'gender':0, 'age':23, 'y':7 },
+        { 'gender':1, 'age':26, 'y':4 },
+        { 'gender':0, 'age':27, 'y':4 },
+        { 'gender':1, 'age':29, 'y':2 },
+        { 'gender':1, 'age':30, 'y':1 },
+        { 'gender':0, 'age':40, 'y':1 },
+        { 'gender':0, 'age':100, 'y':10 },
+        { 'gender':1, 'age':100, 'y':9 },
+    ]);
+
+    const model = new JLBoost();
+
+    model.train( {xy_data_ptr: [test_dataframe], y_index:'y', n_steps:4000, tree_depth:8, talk:true })
+
+    const model_results = model.predict( [test_dataframe] );
+
+    const with_prediction = test_dataframe.withSeries( "prediction", new Series(model_results) )
+                            .withSeries( "diff", (df) => df.select( (r) => r.prediction - r.y ) as any );
+
+
+    //console.log( with_prediction.toString() );
 }
