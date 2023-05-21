@@ -1,5 +1,3 @@
-import { DataFrame, IDataFrame, ISeries, Series } from "data-forge";
-
 let range = (n: number, offset: number) =>
   Array.from(Array(n).keys()).map((n) => n + offset);
 
@@ -23,7 +21,7 @@ class TreeLeaf {
 const MIDDLE_SPLIT_FAVOR: number = 0.25;
 
 interface TreeBranch__random_tree__NamedParameters{
-    xy_data: IDataFrame, 
+    xy_data: {[key: string]: number}[], 
     num_levels: number,
     y_index: string,
     ignored_categories: string[]
@@ -48,12 +46,8 @@ class TreeBranch {
                     this.left_side.predict_single(data);
     }
 
-    predict(xy_data: IDataFrame): ISeries {
-        return xy_data.select( row => {
-            return {
-                result:this.predict_single(row)
-            };
-        } ).getSeries('result');
+    predict(xy_data: {[key: string]: number}[]): number[] {
+        return xy_data.map( row => this.predict_single(row) );
     }
 
     random_tree({
@@ -62,62 +56,67 @@ class TreeBranch {
         y_index,
         ignored_categories
     }:TreeBranch__random_tree__NamedParameters ): TreeBranch {
-        const categories = xy_data.getColumnNames().filter(
+        //assuming the keys on the first object are representative.
+        const categories = Object.keys(xy_data[0]).filter(
             (category) => category !== y_index && !ignored_categories.includes(category)
         );
         //Randomly select a category
         const randomCategoryIndex = Math.floor(Math.random() * categories.length);
         this.feature_index = categories[randomCategoryIndex];
 
-        const length = xy_data.count();
+        const length = xy_data.length;
         const first_of_right_hand = Math.min(
             Math.max(Math.floor(Math.random() * length), 1),
             length - 1
         );
 
         // Sort the section by the selected feature index
-        const xy_data_sorted = xy_data
-            .orderBy((row)=>row[this.feature_index]).resetIndex();
+        const xy_data_sorted = xy_data.slice();
+        xy_data_sorted.sort( (a,b) => a[this.feature_index]-b[this.feature_index]);
 
 
         //determine our split value from the randomly hit split location.
         this.split_value =
             0.5 *
-            (xy_data_sorted.at(first_of_right_hand - 1)[this.feature_index] +
-             xy_data_sorted.at(first_of_right_hand)[this.feature_index]);
+            (xy_data_sorted[first_of_right_hand - 1][this.feature_index] +
+             xy_data_sorted[first_of_right_hand][this.feature_index]);
 
         if (num_levels > 1) {
             if (first_of_right_hand > 1) {
                 this.left_side = new TreeBranch().random_tree({
                     ignored_categories: [],
-                    xy_data:xy_data_sorted.between(0,first_of_right_hand-1),
+                    xy_data:xy_data_sorted.slice(0,first_of_right_hand),
                     num_levels: num_levels - 1,
                     y_index,
                 });
             } else {
                 this.left_side = new TreeLeaf(
-                    xy_data_sorted.getSeries(y_index).between(0,first_of_right_hand-1).average()
+                    //compute average of y_index of left hand side.
+                    xy_data_sorted.slice( 0, first_of_right_hand ).map( row => row[y_index] ).reduce((sum,current) => sum+current,0)/length
                 );
             }
 
             if (length - first_of_right_hand > 1) {
                 this.right_side = new TreeBranch().random_tree({
                     ignored_categories: [],
-                    xy_data:xy_data_sorted.between(first_of_right_hand,length-1),
+                    xy_data:xy_data_sorted.slice(first_of_right_hand,length),
                     num_levels: num_levels - 1,
                     y_index
                 });
             } else {
                 this.right_side = new TreeLeaf(
-                    xy_data_sorted.getSeries(y_index).between(first_of_right_hand,length - 1).average()
+                    //compute average of y_index of right handn side.
+                    xy_data_sorted.slice( first_of_right_hand, length ).map( row => row[y_index] ).reduce((sum,current) => sum+current,0)/length
                 );
             }
         } else {
             this.left_side = new TreeLeaf(
-                xy_data_sorted.getSeries(y_index).between(0,first_of_right_hand-1).average()
+                //compute average of y_index of left hand side.
+                xy_data_sorted.slice( 0, first_of_right_hand ).map( row => row[y_index] ).reduce((sum,current) => sum+current,0)/length
             );
             this.right_side = new TreeLeaf(
-                xy_data_sorted.getSeries(y_index).between(first_of_right_hand,length - 1).average()
+                //compute average of y_index of right handn side.
+                xy_data_sorted.slice( first_of_right_hand, length ).map( row => row[y_index] ).reduce((sum,current) => sum+current,0)/length
             );
         }
 
@@ -126,7 +125,7 @@ class TreeBranch {
 }
 
 interface JLBoost__train__NamedParamaters {
-    xy_data: IDataFrame, // Replace 'any' with the appropriate type for xy_data
+    xy_data: {[key: string]: number}[], // Replace 'any' with the appropriate type for xy_data
     y_index: string,
     n_steps: number,
     tree_depth: number,
@@ -141,13 +140,13 @@ export class JLBoost {
         this.learning_rate = learning_rate;
     }
 
-    predict(xy_data: IDataFrame ): any {
-        let output: any = Array(xy_data.count()).fill(0);
+    predict(xy_data: {[key: string]: number}[] ): any {
+        let output: any = Array(xy_data.length).fill(0);
 
         for (const tree of this.trees) {
             const treePrediction = tree.predict(xy_data)
             output = output.map((value: number, index: number) => {
-                return value + treePrediction.at(index) * this.learning_rate;
+                return value + treePrediction[index] * this.learning_rate;
             });
         }
         return output;
@@ -175,34 +174,36 @@ export class JLBoost {
         let current_output = this.predict(xy_data);
 
         //Drop all features which don't do anything.
-        for( const feature of xy_data.getColumnNames() ){
-            const feature_data = xy_data.getSeries( feature ).toArray();
-            const max_value = feature_data.reduce((max,current) => {
-                return current > max ? current : max;
+        let featuresToDrop : string[] = [];
+        for( const feature of Object.keys(xy_data[0]) ){
+            const max_value = xy_data.reduce((max,current) => {
+                return current[feature] > max ? current[feature] : max;
             }, Number.MIN_SAFE_INTEGER);
-            const min_value = feature_data.reduce((min,current) => {
-                return current < min ? current : min;
+            const min_value = xy_data.reduce((min,current) => {
+                return current[feature] < min ? current[feature] : min;
             }, Number.MAX_SAFE_INTEGER);
 
             //if( feature_data.max() == feature_data.min() ){
             if( max_value == min_value ){
-                xy_data = xy_data.dropSeries( feature );
+                featuresToDrop.push( feature );
                 if(talk){
                     console.log( `Dropping constant feature ${feature}` );
                 }
             }
         }
+        xy_data = xy_data.map( row => Object.fromEntries(Object.entries(row).filter(([feature,value]) => !(feature in featuresToDrop))));
 
         let ignored_categories: string[] = [];
         let last_loss: number | null = null;
 
         for (let n = 0; n < n_steps; n++) {
-            const adjusted_data = xy_data.withSeries(y_index, 
-                xy_data.select( (row,row_n) => row[y_index] - current_output.at(row_n) ) as any
-            )
 
-            //const adjusted_data_ptr = [new DataFrame(xy_data_ptr[0])];
-            //adjusted_data_ptr[y_index] = xy_data[y_index] - current_output;
+            const adjusted_data = xy_data.map( (row, row_n) => {
+                return {
+                    ...row,
+                    [y_index]: row[y_index] - current_output[row_n]
+                }
+            })
 
             const new_tree = new TreeBranch();
             new_tree.random_tree({
@@ -213,12 +214,16 @@ export class JLBoost {
             });
 
             const new_tree_output = new_tree.predict( xy_data );
-            const new_output = current_output.map((value: number, index: number) => {
-                return value + new_tree_output.at(index) * this.learning_rate;
+            const new_output: number[] = current_output.map((value: number, index: number) => {
+                return value + new_tree_output[index] * this.learning_rate;
             });
 
             //const new_loss = Math.stdDev(xy_data[y_index] - new_output);
-            const new_loss = xy_data.getSeries(y_index).select( (target,n) => new_output[n]-target ).std();
+            const error : number[] = xy_data.map( (row,row_n) => new_output[row_n] - row[y_index] );
+            const error_sum : number = error.reduce( (sum,current) => sum+current, 0 );
+            const error_mean = error_sum/error.length;
+            const error_dist_squared = error.map( value => (value-error_mean)*(value-error_mean) ).reduce( (sum,current) => sum+current, 0 );
+            const new_loss = Math.sqrt( error_dist_squared/error.length );
 
             ignored_categories = [new_tree.feature_index];
 
@@ -248,7 +253,7 @@ export class JLBoost {
 if (require.main === module) {
     //Do some tests of the module
 
-    const test_dataframe = new DataFrame([
+    const test_dataframe = [
         { 'gender':0, 'age':2,  'y':0 },
         { 'gender':1, 'age':3,  'y':0 },
         { 'gender':0, 'age':6,  'y':0 },
@@ -270,7 +275,7 @@ if (require.main === module) {
         { 'gender':0, 'age':40, 'y':1 },
         { 'gender':0, 'age':100, 'y':10 },
         { 'gender':1, 'age':100, 'y':9 },
-    ]);
+    ];
 
     const model = new JLBoost();
 
@@ -278,9 +283,14 @@ if (require.main === module) {
 
     const model_results = model.predict( test_dataframe );
 
-    const with_prediction = test_dataframe.withSeries( "prediction", new Series(model_results) )
-                            .withSeries( "diff", (df) => df.select( (r) => r.prediction - r.y ) as any );
 
+    const with_prediction = test_dataframe.map( (row,row_n) => {
+        return {
+            ...row,
+            prediction: model_results[row_n],
+            diff: model_results[row_n]-row['y']
+        }
+    });
 
-    console.log( with_prediction.toString() );
+    console.table( with_prediction );
 }

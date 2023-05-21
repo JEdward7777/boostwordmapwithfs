@@ -7,7 +7,6 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as catboost from "catboost";
 import {JLBoost} from "./JLBoost";
-import { DataFrame} from "data-forge";
 
 
 export const catboost_feature_order : string[] = [
@@ -522,7 +521,7 @@ export class JLBoostWordMap extends CatBoostWordMap{
 
     do_boost_training( correct_predictions: Prediction[], incorrect_predictions: Prediction[] ): Promise<string>{
         //first collect the data to train on.
-        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: string}{
+        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: number}{
             const result = {};
             catboost_feature_order.forEach( (feature_name) => {
                 try {
@@ -542,14 +541,14 @@ export class JLBoostWordMap extends CatBoostWordMap{
 
         const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
             .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
-        const training_data_df = new DataFrame( training_data );
+
         
 
         this.jlboost_model = new JLBoost();
 
         return new Promise<string>((resolve) => {
             this.jlboost_model.train({
-                xy_data:training_data_df,
+                xy_data:training_data,
                 y_index:"output",
                 n_steps:4000,
                 tree_depth:3,
