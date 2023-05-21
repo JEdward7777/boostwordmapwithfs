@@ -23,11 +23,9 @@ class TreeLeaf {
 const MIDDLE_SPLIT_FAVOR: number = 0.25;
 
 interface TreeBranch__random_tree__NamedParameters{
-    xy_data_ptr: IDataFrame[], 
+    xy_data: IDataFrame, 
     num_levels: number,
     y_index: string,
-    index_start: number,
-    index_after_end: number,
     ignored_categories: string[]
 }
 
@@ -50,8 +48,8 @@ class TreeBranch {
                     this.left_side.predict_single(data);
     }
 
-    predict(xy_data_ptr: IDataFrame[]): ISeries {
-        return xy_data_ptr[0].select( row => {
+    predict(xy_data: IDataFrame): ISeries {
+        return xy_data.select( row => {
             return {
                 result:this.predict_single(row)
             };
@@ -59,76 +57,67 @@ class TreeBranch {
     }
 
     random_tree({
-        xy_data_ptr,
+        xy_data,
         num_levels,
         y_index,
-        index_start,
-        index_after_end,
         ignored_categories
     }:TreeBranch__random_tree__NamedParameters ): TreeBranch {
-        const categories = xy_data_ptr[0].getColumnNames().filter(
+        const categories = xy_data.getColumnNames().filter(
             (category) => category !== y_index && !ignored_categories.includes(category)
         );
         //Randomly select a category
         const randomCategoryIndex = Math.floor(Math.random() * categories.length);
         this.feature_index = categories[randomCategoryIndex];
 
-        const length = index_after_end - index_start;
+        const length = xy_data.count();
         const first_of_right_hand = Math.min(
             Math.max(Math.floor(Math.random() * length), 1),
             length - 1
-        ) + index_start;
+        );
 
         // Sort the section by the selected feature index
-        const sorted_sub_range = xy_data_ptr[0]
-            .between(index_start,index_after_end-1)
-            .orderBy((row)=>row[this.feature_index])
-            .withIndex(range(index_after_end-index_start,index_start));
-        //now replace the original data with the data with the sorted subrange baked back in.
-        xy_data_ptr[0] = DataFrame.merge([xy_data_ptr[0],sorted_sub_range])
+        const xy_data_sorted = xy_data
+            .orderBy((row)=>row[this.feature_index]).resetIndex();
+
 
         //determine our split value from the randomly hit split location.
         this.split_value =
             0.5 *
-            (xy_data_ptr[0].at(first_of_right_hand - 1)[this.feature_index] +
-                xy_data_ptr[0].at(first_of_right_hand)[this.feature_index]);
+            (xy_data_sorted.at(first_of_right_hand - 1)[this.feature_index] +
+             xy_data_sorted.at(first_of_right_hand)[this.feature_index]);
 
         if (num_levels > 1) {
-            if (first_of_right_hand - index_start > 1) {
+            if (first_of_right_hand > 1) {
                 this.left_side = new TreeBranch().random_tree({
                     ignored_categories: [],
-                    xy_data_ptr,
+                    xy_data:xy_data_sorted.between(0,first_of_right_hand-1),
                     num_levels: num_levels - 1,
                     y_index,
-                    index_start,
-                    index_after_end: first_of_right_hand,
                 });
             } else {
                 this.left_side = new TreeLeaf(
-                    xy_data_ptr[0].getSeries(y_index).between(index_start,first_of_right_hand-1).average()
+                    xy_data_sorted.getSeries(y_index).between(0,first_of_right_hand-1).average()
                 );
             }
 
-            if (index_after_end - first_of_right_hand > 1) {
+            if (length - first_of_right_hand > 1) {
                 this.right_side = new TreeBranch().random_tree({
                     ignored_categories: [],
-                    xy_data_ptr,
+                    xy_data:xy_data_sorted.between(first_of_right_hand,length-1),
                     num_levels: num_levels - 1,
-                    y_index,
-                    index_start: first_of_right_hand,
-                    index_after_end,
+                    y_index
                 });
             } else {
                 this.right_side = new TreeLeaf(
-                    xy_data_ptr[0].getSeries(y_index).between(first_of_right_hand,index_after_end - 1).average()
+                    xy_data_sorted.getSeries(y_index).between(first_of_right_hand,length - 1).average()
                 );
             }
         } else {
             this.left_side = new TreeLeaf(
-                xy_data_ptr[0].getSeries(y_index).between(index_start,first_of_right_hand-1).average()
+                xy_data_sorted.getSeries(y_index).between(0,first_of_right_hand-1).average()
             );
             this.right_side = new TreeLeaf(
-                xy_data_ptr[0].getSeries(y_index).between(first_of_right_hand,index_after_end - 1).average()
+                xy_data_sorted.getSeries(y_index).between(first_of_right_hand,length - 1).average()
             );
         }
 
@@ -137,7 +126,7 @@ class TreeBranch {
 }
 
 interface JLBoost__train__NamedParamaters {
-    xy_data_ptr: IDataFrame[], // Replace 'any' with the appropriate type for xy_data
+    xy_data: IDataFrame, // Replace 'any' with the appropriate type for xy_data
     y_index: string,
     n_steps: number,
     tree_depth: number,
@@ -152,11 +141,11 @@ export class JLBoost {
         this.learning_rate = learning_rate;
     }
 
-    predict(xy_data_ptr: IDataFrame[] ): any {
-        let output: any = Array(xy_data_ptr[0].count()).fill(0);
+    predict(xy_data: IDataFrame ): any {
+        let output: any = Array(xy_data.count()).fill(0);
 
         for (const tree of this.trees) {
-            const treePrediction = tree.predict(xy_data_ptr)
+            const treePrediction = tree.predict(xy_data)
             output = output.map((value: number, index: number) => {
                 return value + treePrediction.at(index) * this.learning_rate;
             });
@@ -177,7 +166,7 @@ export class JLBoost {
 
 
     train({
-        xy_data_ptr,
+        xy_data,
         y_index = 'y',
         n_steps = 1000,
         tree_depth = 2,
@@ -185,15 +174,15 @@ export class JLBoost {
     }: JLBoost__train__NamedParamaters ): JLBoost {
 
 
-        let current_output = this.predict(xy_data_ptr);
+        let current_output = this.predict(xy_data);
 
         let ignored_categories: string[] = [];
         let last_loss: number | null = null;
 
         for (let n = 0; n < n_steps; n++) {
-            const adjusted_data_ptr = [ xy_data_ptr[0].withSeries(y_index, 
-                xy_data_ptr[0].select( (row,row_n) => row[y_index] - current_output.at(row_n) ) as any
-            )]
+            const adjusted_data = xy_data.withSeries(y_index, 
+                xy_data.select( (row,row_n) => row[y_index] - current_output.at(row_n) ) as any
+            )
 
             //const adjusted_data_ptr = [new DataFrame(xy_data_ptr[0])];
             //adjusted_data_ptr[y_index] = xy_data[y_index] - current_output;
@@ -202,19 +191,17 @@ export class JLBoost {
             new_tree.random_tree({
                 num_levels: tree_depth,
                 ignored_categories: ignored_categories,
-                xy_data_ptr: adjusted_data_ptr,
-                y_index: y_index,
-                index_start: 0,
-                index_after_end: adjusted_data_ptr[0].count(),
+                xy_data: adjusted_data,
+                y_index: y_index
             });
 
-            const new_tree_output = new_tree.predict( xy_data_ptr );
+            const new_tree_output = new_tree.predict( xy_data );
             const new_output = current_output.map((value: number, index: number) => {
                 return value + new_tree_output.at(index) * this.learning_rate;
             });
 
             //const new_loss = Math.stdDev(xy_data[y_index] - new_output);
-            const new_loss = xy_data_ptr[0].getSeries(y_index).select( (target,n) => new_output[n]-target ).std();
+            const new_loss = xy_data.getSeries(y_index).select( (target,n) => new_output[n]-target ).std();
 
             ignored_categories = [new_tree.feature_index];
 
@@ -270,9 +257,9 @@ if (require.main === module) {
 
     const model = new JLBoost();
 
-    model.train( {xy_data_ptr: [test_dataframe], y_index:'y', n_steps:3000, tree_depth:4, talk:true })
+    model.train( {xy_data: test_dataframe, y_index:'y', n_steps:3000, tree_depth:4, talk:true })
 
-    const model_results = model.predict( [test_dataframe] );
+    const model_results = model.predict( test_dataframe );
 
     const with_prediction = test_dataframe.withSeries( "prediction", new Series(model_results) )
                             .withSeries( "diff", (df) => df.select( (r) => r.prediction - r.y ) as any );

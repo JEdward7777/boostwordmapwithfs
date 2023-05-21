@@ -549,7 +549,7 @@ export class JLBoostWordMap extends CatBoostWordMap{
 
         return new Promise<string>((resolve) => {
             this.jlboost_model.train({
-                xy_data_ptr:[training_data_df],
+                xy_data:training_data_df,
                 y_index:"output",
                 n_steps:4000,
                 tree_depth:3,
