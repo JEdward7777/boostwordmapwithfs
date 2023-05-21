@@ -172,9 +172,26 @@ export class JLBoost {
         tree_depth = 2,
         talk = true,
     }: JLBoost__train__NamedParamaters ): JLBoost {
-
-
         let current_output = this.predict(xy_data);
+
+        //Drop all features which don't do anything.
+        for( const feature of xy_data.getColumnNames() ){
+            const feature_data = xy_data.getSeries( feature ).toArray();
+            const max_value = feature_data.reduce((max,current) => {
+                return current > max ? current : max;
+            }, Number.MIN_SAFE_INTEGER);
+            const min_value = feature_data.reduce((min,current) => {
+                return current < min ? current : min;
+            }, Number.MAX_SAFE_INTEGER);
+
+            //if( feature_data.max() == feature_data.min() ){
+            if( max_value == min_value ){
+                xy_data = xy_data.dropSeries( feature );
+                if(talk){
+                    console.log( `Dropping constant feature ${feature}` );
+                }
+            }
+        }
 
         let ignored_categories: string[] = [];
         let last_loss: number | null = null;
