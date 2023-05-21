@@ -84,6 +84,27 @@ function loadSourceTargetData_Mat(): SourceTargetData{
     return data;
 }
 
+function  loadSourceTargetData_SpanishTit(): SourceTargetData{
+    const tc_alignment = recursive_json_load( "/home/lansford/translationCore/projects/es-419_glt_tit_book/.apps/translationCore/alignmentData/tit")
+
+    const tc_target_lang_book  = recursive_json_load( "/home/lansford/translationCore/projects/es-419_glt_tit_book/tit" );
+    const tc_source_lang_book  = recursive_json_load( "/home/lansford/work2/Mission_Mutual/translationCore/tcResources/el-x-koine/bibles/ugnt/v0.30_Door43-Catalog/books.zip" ).tit
+
+    const tc_target_lang_book__train = Object.fromEntries( Object.entries( tc_target_lang_book).filter(([key, value]) => !isNaN(Number(key)) && parseInt(key) <= 2 ) );
+    const tc_target_lang_book__test = Object.fromEntries( Object.entries( tc_target_lang_book).filter(([key, value]) => !isNaN(Number(key)) && parseInt(key) > 2 ) );
+
+
+    const bookName: string = "tit";
+    const data = new SourceTargetData();
+    data.wm_target_lang_book__train = convert_tc_to_token_dict( bookName, tc_target_lang_book__train, false );
+    data.wm_target_lang_book__test  = convert_tc_to_token_dict( bookName, tc_target_lang_book__test,  false );
+    data.wm_source_lang_book = convert_tc_to_token_dict( bookName, tc_source_lang_book, true );
+    data.wm_alignment__train = convert_alignment_to_alignment_dict( bookName, tc_alignment, data.wm_source_lang_book, data.wm_target_lang_book__train);
+    data.wm_alignment__test = convert_alignment_to_alignment_dict( bookName, tc_alignment, data.wm_source_lang_book, data.wm_target_lang_book__test);
+
+    return data;
+}
+
 function loadSourceTargetData_Gen(): SourceTargetData{
     const tc_alignment = recursive_json_load( "/home/lansford/translationCore/projects/en_ult_gen_book/.apps/translationCore/alignmentData/gen")
 
@@ -158,7 +179,8 @@ function run_configurable_wordmap_test( alignment_adding_method: number, boost_t
                                  alignment_adding_method == 3 ?   boostMap.add_alignments_3:
                               /* alignment_adding_method == 4 ?*/ boostMap.add_alignments_4;
 
-    const selected_data = lang_selections == "greek-english-mat" ? loadSourceTargetData_Mat():
+    const selected_data = lang_selections == "greek-spanish-tit" ? loadSourceTargetData_SpanishTit():
+                          lang_selections == "greek-english-mat" ? loadSourceTargetData_Mat():
                         /*lang_selections == "heb-english-gen" ? */loadSourceTargetData_Gen();
 
     let csv_code : string = `${alignment_adding_method}_${boost_type}_${lang_selections}`;
@@ -176,5 +198,10 @@ if (require.main === module) {
     // run_configurable_wordmap_test( 2, "boost", "greek-english-mat", .9 )
 
     //run_configurable_wordmap_test( 2, "first_letter", "heb-english-gen", .1 )
-    run_configurable_wordmap_test( 2, "first_letter", "greek-english-mat", 1 )
+    //run_configurable_wordmap_test( 2, "first_letter", "greek-english-mat", 1 )
+
+    // run_configurable_wordmap_test( 2, "plane", "greek-spanish-tit", 1 )
+    // run_configurable_wordmap_test( 2, "morph_boost", "greek-spanish-tit", 1 )
+    // run_configurable_wordmap_test( 2, "boost", "greek-spanish-tit", 1 )
+    run_configurable_wordmap_test( 2, "first_letter", "greek-spanish-tit", 1 )
 }
