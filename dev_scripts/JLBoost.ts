@@ -164,6 +164,16 @@ export class JLBoost {
         return output;
     }
 
+    predict_single( data: {[key: string]:number} ): number{
+        let output: number = 0;
+
+        for( const tree of this.trees){
+            const treePrediction = tree.predict_single( data )
+            output += treePrediction * this.learning_rate;
+        }
+
+        return output;
+    }
 
 
     train({
@@ -260,7 +270,7 @@ if (require.main === module) {
 
     const model = new JLBoost();
 
-    model.train( {xy_data_ptr: [test_dataframe], y_index:'y', n_steps:4000, tree_depth:8, talk:true })
+    model.train( {xy_data_ptr: [test_dataframe], y_index:'y', n_steps:3000, tree_depth:4, talk:true })
 
     const model_results = model.predict( [test_dataframe] );
 
@@ -268,5 +278,5 @@ if (require.main === module) {
                             .withSeries( "diff", (df) => df.select( (r) => r.prediction - r.y ) as any );
 
 
-    //console.log( with_prediction.toString() );
+    console.log( with_prediction.toString() );
 }

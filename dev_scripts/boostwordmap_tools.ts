@@ -6,6 +6,8 @@ import {saveJson, listToDictOfLists} from "./json_tools";
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as catboost from "catboost";
+import {JLBoost} from "./JLBoost";
+import { DataFrame} from "data-forge";
 
 
 export const catboost_feature_order : string[] = [
@@ -493,5 +495,71 @@ export class FirstLetterBoostWordMap extends CatBoostWordMap{
             "catboost_cat_feature_order":first_letter_catboost_cat_feature_order,
             "training_data": listToDictOfLists(training_data),
         },  filename);
+    }
+}
+
+
+function jlboost_prediction_to_feature_dict( prediction: Prediction ): {[key:string]:number}{
+    const result: {[key: string]:number} = {};
+    const scores = prediction.getScores();
+    catboost_feature_order.forEach( key => {
+        result[key] = scores[key] ?? 0;
+    });
+    return result;
+}
+
+export class JLBoostWordMap extends CatBoostWordMap{
+    protected jlboost_model: JLBoost | null = null;
+
+    catboost_score( predictions: Prediction[]): Prediction[] { 
+        for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
+            const numerical_features = jlboost_prediction_to_feature_dict(predictions[prediction_i]);
+            const confidence = this.jlboost_model.predict_single( numerical_features );
+            predictions[prediction_i].setScore("confidence", confidence);
+        }
+        return Engine.sortPredictions(predictions);
+    }
+
+    do_boost_training( correct_predictions: Prediction[], incorrect_predictions: Prediction[] ): Promise<string>{
+        //first collect the data to train on.
+        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: string}{
+            const result = {};
+            catboost_feature_order.forEach( (feature_name) => {
+                try {
+                    result[feature_name] = prediction.getScore(feature_name) ?? 0;
+                } catch (error) {
+                    if (error.message.startsWith("Unknown score key")) {
+                        result[feature_name] = 0;
+                    } else {
+                        throw error; // re-throw the error if it's not the expected error type
+                    }
+                }
+            });
+            result["output"] = is_correct?1:0;
+            return result;
+        };
+
+
+        const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
+            .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
+        const training_data_df = new DataFrame( training_data );
+        
+
+        this.jlboost_model = new JLBoost();
+
+        return new Promise<string>((resolve) => {
+            this.jlboost_model.train({
+                xy_data_ptr:[training_data_df],
+                y_index:"output",
+                n_steps:4000,
+                tree_depth:3,
+                talk:true,
+            });
+            resolve("");
+        });
+    }
+
+    load_model_file( model_file: string ):void{
+        //Need to refactor the class structure.
     }
 }
