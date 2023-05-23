@@ -550,8 +550,8 @@ export class JLBoostWordMap extends CatBoostWordMap{
             this.jlboost_model.train({
                 xy_data:training_data,
                 y_index:"output",
-                n_steps:4000,
-                tree_depth:3,
+                n_steps:500,
+                tree_depth:12,//7,
                 talk:true,
             });
             resolve("");

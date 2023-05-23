@@ -205,5 +205,7 @@ if (require.main === module) {
     // run_configurable_wordmap_test( 2, "morph_boost", "greek-spanish-tit", 1 )
     // run_configurable_wordmap_test( 2, "boost", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "first_letter", "greek-spanish-tit", 1 )
-    run_configurable_wordmap_test( 2, "jlboost", "greek-english-mat", .9 )
+    //run_configurable_wordmap_test( 2, "jlboost", "greek-english-mat", .9 )
+    //run_configurable_wordmap_test( 2, "jlboost", "greek-spanish-tit", 1 )
+    run_configurable_wordmap_test( 2, "jlboost", "heb-english-gen", 1 )
 }
