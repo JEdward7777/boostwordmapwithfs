@@ -1,11 +1,11 @@
- import {recursive_json_load, saveJson} from "./json_tools";
+ import {recursive_json_load, saveJson} from "../src/json_tools";
 import {ChapterVerse, add_book_alignment_to_wordmap, extract_alignment_frequency, compile_verse_text_pair,
     convert_tc_to_token_dict, convert_alignment_to_alignment_dict, grade_mapping_method,
-    word_map_predict_tokens} from "./wordmap_tools";
+    word_map_predict_tokens} from "../src/wordmap_tools";
 import WordMap, {Suggestion,Alignment} from "wordmap";
 import { createWriteStream } from 'fs';
 import {Token} from "wordmap-lexer";
-import {PlaneWordMap, CatBoostWordMap, MorphCatBoostWordMap, FirstLetterBoostWordMap, JLBoostWordMap } from "./boostwordmap_tools";
+import {PlaneWordMap, CatBoostWordMap, MorphCatBoostWordMap, FirstLetterBoostWordMap, JLBoostWordMap } from "../src/boostwordmap_tools";
 
 
 function run_plane_wordmap_test(){
@@ -206,6 +206,6 @@ if (require.main === module) {
     // run_configurable_wordmap_test( 2, "boost", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "first_letter", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "jlboost", "greek-english-mat", .9 )
-    //run_configurable_wordmap_test( 2, "jlboost", "greek-spanish-tit", 1 )
-    run_configurable_wordmap_test( 2, "jlboost", "heb-english-gen", 1 )
+    run_configurable_wordmap_test( 2, "jlboost", "greek-spanish-tit", 1 )
+    //run_configurable_wordmap_test( 2, "jlboost", "heb-english-gen", 1 )
 }

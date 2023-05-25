@@ -1,12 +1,12 @@
 import {WordMapProps} from "wordmap/core/WordMap"
 import WordMap, { Alignment, Ngram, Suggestion, Prediction, Engine } from 'wordmap';
 import Lexer,{Token} from "wordmap-lexer";
-import {is_correct_prediction} from "../src/wordmap_tools"; 
-import {saveJson, listToDictOfLists} from "../src/json_tools";
+import {is_correct_prediction} from "./wordmap_tools"; 
+import {saveJson, listToDictOfLists} from "./json_tools";
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as catboost from "catboost";
-import {JLBoost} from "../src/JLBoost";
+import {JLBoost} from "./JLBoost";
 
 
 export const catboost_feature_order : string[] = [

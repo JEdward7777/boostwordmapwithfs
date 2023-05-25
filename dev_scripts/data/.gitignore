@@ -1,0 +1,3 @@
+#I am ignoring output files generated in csv and checking them
+#in if I convert them to ods.
+*.csv

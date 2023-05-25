@@ -1,0 +1,3 @@
+#I am letting the catboost training be a background process
+#so I don't want to check in the random files it generates.
+catboost_training/*
