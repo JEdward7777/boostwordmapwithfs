@@ -75,16 +75,22 @@ function scores_to_catboost_features( scores: {[key:string]:number} ){
     return catboost_feature_order.map( (feature_name) => ( (scores[feature_name] === undefined)?0:scores[feature_name] ) );
 }
 
-export abstract class BoostWordMap extends WordMap{
-
-    protected ratio_of_training_data: number = 1; //The ratio of how much data to use so we can thin data.
+export abstract class AbstractWordMapWrapper extends WordMap{
     constructor(opts?: WordMapProps){
         super(opts);
     }
 
+}
+
+export abstract class BoostWordMap extends AbstractWordMapWrapper{
+
+    protected ratio_of_training_data: number = 1; //The ratio of how much data to use so we can thin data.
+
     setTrainingRatio(ratio_of_training_data: number) {
         this.ratio_of_training_data = ratio_of_training_data;
     }
+
+    abstract catboost_score( predictions: Prediction[]): Prediction[];
 
     collect_boost_training_data( source_text: {[key: string]: Token[]}, 
             target_text: {[key: string]: Token[]}, 
@@ -192,11 +198,42 @@ export abstract class BoostWordMap extends WordMap{
 
         return this.do_boost_training(correct_predictions, incorrect_predictions);
     }
+
+
+    
+    /**
+     * Predicts the word alignments between the sentences.
+     * @param {string} sourceSentence - a sentence from the source text
+     * @param {string} targetSentence - a sentence from the target text
+     * @param {number} maxSuggestions - the maximum number of suggestions to return
+     * @param minConfidence - the minimum confidence score required for a prediction to be used
+     * @return {Suggestion[]}
+     */
+    public predict(sourceSentence: string | Token[], targetSentence: string | Token[], maxSuggestions: number = 1, minConfidence: number = 0.1): Suggestion[] {
+        let sourceTokens = [];
+        let targetTokens = [];
+
+        if (typeof sourceSentence === "string") {
+            sourceTokens = Lexer.tokenize(sourceSentence);
+        } else {
+            sourceTokens = sourceSentence;
+        }
+
+        if (typeof targetSentence === "string") {
+            targetTokens = Lexer.tokenize(targetSentence);
+        } else {
+            targetTokens = targetSentence;
+        }
+
+        const engine_run = (this as any).engine.run(sourceTokens, targetTokens);
+        const predictions = this.catboost_score( engine_run );
+        return Engine.suggest(predictions, maxSuggestions, (this as any).forceOccurrenceOrder, minConfidence);
+    }
 }
 
 //The point of this class is to make a way of interract with WordMap
 //which uses the same extended interface of the CatBoostWordMap interface.
-export class PlaneWordMap extends BoostWordMap{
+export class PlaneWordMap extends AbstractWordMapWrapper{
     setTrainingRatio(ratio_of_training_data: number) { /*do nothing.*/ }
 
     add_alignments_1( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
@@ -246,34 +283,8 @@ export class CatBoostWordMap extends BoostWordMap{
         // );
         return Engine.sortPredictions(predictions);
     }
-    /**
-     * Predicts the word alignments between the sentences.
-     * @param {string} sourceSentence - a sentence from the source text
-     * @param {string} targetSentence - a sentence from the target text
-     * @param {number} maxSuggestions - the maximum number of suggestions to return
-     * @param minConfidence - the minimum confidence score required for a prediction to be used
-     * @return {Suggestion[]}
-     */
-    public predict(sourceSentence: string | Token[], targetSentence: string | Token[], maxSuggestions: number = 1, minConfidence: number = 0.1): Suggestion[] {
-        let sourceTokens = [];
-        let targetTokens = [];
-
-        if (typeof sourceSentence === "string") {
-            sourceTokens = Lexer.tokenize(sourceSentence);
-        } else {
-            sourceTokens = sourceSentence;
-        }
-
-        if (typeof targetSentence === "string") {
-            targetTokens = Lexer.tokenize(targetSentence);
-        } else {
-            targetTokens = targetSentence;
-        }
-
-        const engine_run = (this as any).engine.run(sourceTokens, targetTokens);
-        const predictions = this.catboost_score( engine_run );
-        return Engine.suggest(predictions, maxSuggestions, (this as any).forceOccurrenceOrder, minConfidence);
-    }save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
+    
+    save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
         //first dump the data out to a json file
         const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: string}{
             const result = {};
