@@ -228,10 +228,15 @@ export function is_correct_prediction( suggested_mapping: Prediction, manual_map
     mappingLoop: for( let manual_mapping_i = 0; manual_mapping_i < manual_mappings.length; ++manual_mapping_i ){
         const manual_mapping = manual_mappings[manual_mapping_i];
 
-        const manual_mapping_source = manual_mapping.sourceNgram.getTokens();
-        const suggested_mapping_source = suggested_mapping.source.getTokens();
-        const manual_mapping_target = manual_mapping.targetNgram.getTokens();
-        const suggested_mapping_target = suggested_mapping.target.getTokens();
+        // const manual_mapping_source = manual_mapping.sourceNgram.getTokens();
+        // const suggested_mapping_source = suggested_mapping.source.getTokens();
+        // const manual_mapping_target = manual_mapping.targetNgram.getTokens();
+        // const suggested_mapping_target = suggested_mapping.target.getTokens();
+       
+        const manual_mapping_source = manual_mapping.sourceNgram.getTokens().slice().sort();
+        const suggested_mapping_source = suggested_mapping.source.getTokens().slice().sort();
+        const manual_mapping_target = manual_mapping.targetNgram.getTokens().slice().sort();
+        const suggested_mapping_target = suggested_mapping.target.getTokens().slice().sort();
 
         //see if the ngram on the suggestion are the same length
         if( manual_mapping_source.length != suggested_mapping_source.length ) continue mappingLoop;
@@ -256,6 +261,53 @@ export function is_correct_prediction( suggested_mapping: Prediction, manual_map
             if( manual_word.occurrence  != suggested_word.occurrence  ) continue mappingLoop;
             if( manual_word.occurrences != suggested_word.occurrences ) continue mappingLoop;
         }
+
+        //We found this mapping so no need to keep looking for it.
+        return true;
+    }
+    return false;
+}
+
+export function is_part_of_correct_prediction( suggested_mapping: Prediction, manual_mappings: Alignment[] ): boolean{
+    //This assumes that the predictions passed in do not have ngrams greater then one.
+
+    mappingLoop: for( let manual_mapping_i = 0; manual_mapping_i < manual_mappings.length; ++manual_mapping_i ){
+        const manual_mapping = manual_mappings[manual_mapping_i];
+
+        const manual_mapping_source = manual_mapping.sourceNgram.getTokens();
+        
+        //const suggested_mapping_source = suggested_mapping.source.getTokens();
+        const suggested_source_word = suggested_mapping.source.getTokens()[0]
+        const manual_mapping_target = manual_mapping.targetNgram.getTokens();
+        //const suggested_mapping_target = suggested_mapping.target.getTokens();
+        const suggested_target_word = suggested_mapping.target.getTokens()[0];
+
+
+        //now check the source ngram is a subset of the prediction
+        let found_source = false;
+        for( let source_ngram_i = 0; source_ngram_i < manual_mapping_source.length && !found_source; ++source_ngram_i ){
+            const manual_word = manual_mapping_source[source_ngram_i];
+
+            if( manual_word.toString()  == suggested_source_word.toString() &&
+                    manual_word.occurrence  == suggested_source_word.occurrence &&
+                    manual_word.occurrences == suggested_source_word.occurrences ){
+                found_source = true;
+            }
+        }
+        if( !found_source ) continue mappingLoop;
+
+        //and the target ngram.
+        let found_target = false;
+        for( let target_ngram_i = 0; target_ngram_i < manual_mapping_target.length && !found_target; ++target_ngram_i ){
+            const manual_word = manual_mapping_target[target_ngram_i];
+
+            if( manual_word.toString() == suggested_target_word.toString() &&
+                    manual_word.occurrence == suggested_target_word.occurrence &&
+                    manual_word.occurrences == suggested_target_word.occurrences ){
+                found_target = true;
+            }
+        }
+        if( !found_target ) continue mappingLoop;
 
         //We found this mapping so no need to keep looking for it.
         return true;
