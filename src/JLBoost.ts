@@ -122,7 +122,7 @@ class TreeBranch extends BranchOrLeaf {
             xy_data_sorted = haves.concat(have_nots);
             first_of_right_hand = haves.length;
         }else{
-            const first_of_right_hand = Math.min(
+            first_of_right_hand = Math.min(
                 Math.max(Math.floor(Math.random() * length), 1),
                 length - 1
             );
