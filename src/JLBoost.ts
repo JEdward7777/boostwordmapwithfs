@@ -89,98 +89,129 @@ class TreeBranch extends BranchOrLeaf {
         y_index,
         ignored_categories,
         categorical_categories,
-    }:TreeBranch__random_tree__NamedParameters ): TreeBranch {
+    }:TreeBranch__random_tree__NamedParameters ): BranchOrLeaf {
         //assuming the keys on the first object are representative.
         const categories = Object.keys(xy_data[0]).filter(
             (category) => category !== y_index && !ignored_categories.includes(category)
         );
-        //Randomly select a category
-        const randomCategoryIndex = Math.floor(Math.random() * categories.length);
-        this.feature_index = categories[randomCategoryIndex];
+
 
         let xy_data_sorted: {[key: string]: number|string}[] = [];
         let first_of_right_hand: number = 0;
         const length = xy_data.length;
 
-        //determine if this is a categorical category or not.
-        if( categorical_categories.includes(this.feature_index) ){
-            const available_options : string[] = xy_data.reduce((choices,choice) => choices.includes(choice[this.feature_index]) ? choices : [...choices,choice[this.feature_index]], [] );
-            const selected_option_i : number = Math.floor(Math.random()*available_options.length);
-            this.split_value = available_options[selected_option_i];
+        //check if there are any categories left
+        if( categories.length > 0 ){
 
-            //we now need to sort so that the selected option is at the front and everything else is not.
-            const haves : {[key: string]:number|string}[] = [];
-            const have_nots : {[key: string]:number|string}[] = [];
-            xy_data.forEach( (sample) => {
-                if( sample[this.feature_index] === this.split_value ){
-                    haves.push( sample );
-                }else{
-                    have_nots.push( sample );
-                }
-            })
-
-            xy_data_sorted = haves.concat(have_nots);
-            first_of_right_hand = haves.length;
-        }else{
-            first_of_right_hand = Math.min(
-                Math.max(Math.floor(Math.random() * length), 1),
-                length - 1
-            );
-
-            // Sort the section by the selected feature index
-            xy_data_sorted = xy_data.slice();
-            xy_data_sorted.sort( (a,b) => (a[this.feature_index] as number)-(b[this.feature_index] as number));
+            //Randomly select a category
+            const randomCategoryIndex = Math.floor(Math.random() * categories.length);
+            this.feature_index = categories[randomCategoryIndex];
 
 
-            //determine our split value from the randomly hit split location.
-            this.split_value =
-                0.5 *
-                ((xy_data_sorted[first_of_right_hand - 1][this.feature_index] as number) +
-                (xy_data_sorted[first_of_right_hand][this.feature_index] as number));
+            //determine if this is a categorical category or not.
+            if( categorical_categories.includes(this.feature_index) ){
+                const available_options : string[] = xy_data.reduce((choices,choice) => choices.includes(choice[this.feature_index]) ? choices : [...choices,choice[this.feature_index]], [] );
+                const selected_option_i : number = Math.floor(Math.random()*available_options.length);
+                this.split_value = available_options[selected_option_i];
+
+                //we now need to sort so that the selected option is at the front and everything else is not.
+                const haves : {[key: string]:number|string}[] = [];
+                const have_nots : {[key: string]:number|string}[] = [];
+                xy_data.forEach( (sample) => {
+                    if( sample[this.feature_index] === this.split_value ){
+                        haves.push( sample );
+                    }else{
+                        have_nots.push( sample );
+                    }
+                })
+
+                xy_data_sorted = haves.concat(have_nots);
+                first_of_right_hand = haves.length;
+            }else{
+                first_of_right_hand = Math.min(
+                    Math.max(Math.floor(Math.random() * length), 1),
+                    length - 1
+                );
+
+                // Sort the section by the selected feature index
+                xy_data_sorted = xy_data.slice();
+                xy_data_sorted.sort( (a,b) => (a[this.feature_index] as number)-(b[this.feature_index] as number));
+
+
+                //determine our split value from the randomly hit split location.
+                this.split_value =
+                    0.5 *
+                    ((xy_data_sorted[first_of_right_hand - 1][this.feature_index] as number) +
+                    (xy_data_sorted[first_of_right_hand][this.feature_index] as number));
+            }
         }
 
-        if (num_levels > 1) {
-            if (first_of_right_hand > 1) {
-                this.left_side = new TreeBranch().random_tree({
+        //check for a degenerate split.
+        let result : BranchOrLeaf = this;
+        if(first_of_right_hand == 0 ||first_of_right_hand == length){
+            //if we have depth left just try growing a new branch.
+            if (num_levels > 1){
+                //we set our return result to the new random_tree which excludes ourselves (this)
+                //from the resulting tree, but we set the left and right side to the result as
+                //well just to get rid of null pointers running around.
+                result = this.left_side = this.right_side = new TreeBranch().random_tree({
                     ignored_categories: [],
-                    xy_data:xy_data_sorted.slice(0,first_of_right_hand),
+                    xy_data:xy_data_sorted.slice(0,length),
                     num_levels: num_levels - 1,
                     y_index,
                     categorical_categories,
                 });
+            }else{
+                //otherwise just grow a leaf.
+                result = this.left_side = this.right_side = new TreeLeaf(
+                    //compute average of y_index of right hand side.
+                    (xy_data_sorted.slice( 0, length ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
+                );
+            }
+        }else{
+            if (num_levels > 1) {
+                if (first_of_right_hand > 1) {
+                    this.left_side = new TreeBranch().random_tree({
+                        ignored_categories: [],
+                        xy_data:xy_data_sorted.slice(0,first_of_right_hand),
+                        num_levels: num_levels - 1,
+                        y_index,
+                        categorical_categories,
+                    });
+                } else {
+                    this.left_side = new TreeLeaf(
+                        //compute average of y_index of left hand side.
+                        (xy_data_sorted.slice( 0, first_of_right_hand ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
+                    );
+                }
+
+                if (length - first_of_right_hand > 1) {
+                    this.right_side = new TreeBranch().random_tree({
+                        ignored_categories: [],
+                        xy_data:xy_data_sorted.slice(first_of_right_hand,length),
+                        num_levels: num_levels - 1,
+                        y_index,
+                        categorical_categories,
+                    });
+                } else {
+                    this.right_side = new TreeLeaf(
+                        //compute average of y_index of right hand side.
+                        (xy_data_sorted.slice( first_of_right_hand, length ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
+                    );
+                }
             } else {
                 this.left_side = new TreeLeaf(
                     //compute average of y_index of left hand side.
                     (xy_data_sorted.slice( 0, first_of_right_hand ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
                 );
-            }
-
-            if (length - first_of_right_hand > 1) {
-                this.right_side = new TreeBranch().random_tree({
-                    ignored_categories: [],
-                    xy_data:xy_data_sorted.slice(first_of_right_hand,length),
-                    num_levels: num_levels - 1,
-                    y_index,
-                    categorical_categories,
-                });
-            } else {
                 this.right_side = new TreeLeaf(
                     //compute average of y_index of right hand side.
                     (xy_data_sorted.slice( first_of_right_hand, length ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
                 );
             }
-        } else {
-            this.left_side = new TreeLeaf(
-                //compute average of y_index of left hand side.
-                (xy_data_sorted.slice( 0, first_of_right_hand ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
-            );
-            this.right_side = new TreeLeaf(
-                //compute average of y_index of right hand side.
-                (xy_data_sorted.slice( first_of_right_hand, length ).map( row => row[y_index] ) as number[]).reduce((sum,current) => sum+current,0)/length
-            );
         }
 
-        return this;
+        return result;
     }
 }
 
@@ -355,59 +386,59 @@ if (require.main === module) {
 
     //Do some tests of the module
 
-    // const test_data = [
-    //     { 'gender':'m', 'age':2,  'y':0 },
-    //     { 'gender':'f', 'age':3,  'y':0 },
-    //     { 'gender':'m', 'age':6,  'y':0 },
-    //     { 'gender':'f', 'age':7,  'y':0 },
-    //     { 'gender':'f', 'age':9,  'y':0 },
-    //     { 'gender':'m', 'age':12, 'y':.1 },
-    //     { 'gender':'m', 'age':15, 'y':.3 },
-    //     { 'gender':'f', 'age':16, 'y':9 },
-    //     { 'gender':'m', 'age':16, 'y':1 },
-    //     { 'gender':'m', 'age':18, 'y':10 },
-    //     { 'gender':'f', 'age':18, 'y':8 },
-    //     { 'gender':'m', 'age':20, 'y':7 },
-    //     { 'gender':'m', 'age':21, 'y':7 },
-    //     { 'gender':'m', 'age':23, 'y':7 },
-    //     { 'gender':'f', 'age':26, 'y':4 },
-    //     { 'gender':'m', 'age':27, 'y':4 },
-    //     { 'gender':'f', 'age':29, 'y':2 },
-    //     { 'gender':'f', 'age':30, 'y':1 },
-    //     { 'gender':'m', 'age':40, 'y':1 },
-    //     { 'gender':'m', 'age':100, 'y':10 },
-    //     { 'gender':'f', 'age':100, 'y':9 },
-    // ];
-
-    // const model = new JLBoost( {categorical_catagories:['gender'] });
-
     const test_data = [
-        { 'gender':0, 'age':2,  'y':0 },
-        { 'gender':1, 'age':3,  'y':0 },
-        { 'gender':0, 'age':6,  'y':0 },
-        { 'gender':1, 'age':7,  'y':0 },
-        { 'gender':1, 'age':9,  'y':0 },
-        { 'gender':0, 'age':12, 'y':.1 },
-        { 'gender':0, 'age':15, 'y':.3 },
-        { 'gender':1, 'age':16, 'y':9 },
-        { 'gender':0, 'age':16, 'y':1 },
-        { 'gender':0, 'age':18, 'y':10 },
-        { 'gender':1, 'age':18, 'y':8 },
-        { 'gender':0, 'age':20, 'y':7 },
-        { 'gender':0, 'age':21, 'y':7 },
-        { 'gender':0, 'age':23, 'y':7 },
-        { 'gender':1, 'age':26, 'y':4 },
-        { 'gender':0, 'age':27, 'y':4 },
-        { 'gender':1, 'age':29, 'y':2 },
-        { 'gender':1, 'age':30, 'y':1 },
-        { 'gender':0, 'age':40, 'y':1 },
-        { 'gender':0, 'age':100, 'y':10 },
-        { 'gender':1, 'age':100, 'y':9 },
+        { 'gender':'m', 'age':2,  'y':0 },
+        { 'gender':'f', 'age':3,  'y':0 },
+        { 'gender':'m', 'age':6,  'y':0 },
+        { 'gender':'f', 'age':7,  'y':0 },
+        { 'gender':'f', 'age':9,  'y':0 },
+        { 'gender':'m', 'age':12, 'y':.1 },
+        { 'gender':'m', 'age':15, 'y':.3 },
+        { 'gender':'f', 'age':16, 'y':9 },
+        { 'gender':'m', 'age':16, 'y':1 },
+        { 'gender':'m', 'age':18, 'y':10 },
+        { 'gender':'f', 'age':18, 'y':8 },
+        { 'gender':'m', 'age':20, 'y':7 },
+        { 'gender':'m', 'age':21, 'y':7 },
+        { 'gender':'m', 'age':23, 'y':7 },
+        { 'gender':'f', 'age':26, 'y':4 },
+        { 'gender':'m', 'age':27, 'y':4 },
+        { 'gender':'f', 'age':29, 'y':2 },
+        { 'gender':'f', 'age':30, 'y':1 },
+        { 'gender':'m', 'age':40, 'y':1 },
+        { 'gender':'m', 'age':100, 'y':10 },
+        { 'gender':'f', 'age':100, 'y':9 },
     ];
 
-    const model = new JLBoost( {});
+    const model = new JLBoost( {categorical_catagories:['gender'] });
 
-    model.train( {xy_data: test_data, y_index:'y', n_steps:5, tree_depth:2, talk:true })
+    // const test_data = [
+    //     { 'gender':0, 'age':2,  'y':0 },
+    //     { 'gender':1, 'age':3,  'y':0 },
+    //     { 'gender':0, 'age':6,  'y':0 },
+    //     { 'gender':1, 'age':7,  'y':0 },
+    //     { 'gender':1, 'age':9,  'y':0 },
+    //     { 'gender':0, 'age':12, 'y':.1 },
+    //     { 'gender':0, 'age':15, 'y':.3 },
+    //     { 'gender':1, 'age':16, 'y':9 },
+    //     { 'gender':0, 'age':16, 'y':1 },
+    //     { 'gender':0, 'age':18, 'y':10 },
+    //     { 'gender':1, 'age':18, 'y':8 },
+    //     { 'gender':0, 'age':20, 'y':7 },
+    //     { 'gender':0, 'age':21, 'y':7 },
+    //     { 'gender':0, 'age':23, 'y':7 },
+    //     { 'gender':1, 'age':26, 'y':4 },
+    //     { 'gender':0, 'age':27, 'y':4 },
+    //     { 'gender':1, 'age':29, 'y':2 },
+    //     { 'gender':1, 'age':30, 'y':1 },
+    //     { 'gender':0, 'age':40, 'y':1 },
+    //     { 'gender':0, 'age':100, 'y':10 },
+    //     { 'gender':1, 'age':100, 'y':9 },
+    // ];
+
+    // const model = new JLBoost( {});
+
+    model.train( {xy_data: test_data, y_index:'y', n_steps:1000, tree_depth:7, talk:true })
 
     const model_results = model.predict( test_data );
 
