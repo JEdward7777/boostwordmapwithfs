@@ -8,12 +8,12 @@ class TreeLeaf {
         this.average = average;
     }
 
-    predict(xyData: any): number {
+    predict_single(data: {[key: string]:number|string}, categorical_categories: string[]): number {
         return this.average;
     }
 
-    predict_single(data: {[key: number]:any}): number {
-        return this.average;
+    predict(xy_data: {[key: string]: number|string}[], categorical_categories: string[]): number[] {
+        return [...Array(xy_data.length)].map(() => this.average);
     }
 
 }
