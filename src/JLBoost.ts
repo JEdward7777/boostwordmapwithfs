@@ -310,7 +310,25 @@ export class JLBoost {
     }
 }
 
+//https://stackoverflow.com/questions/521295/seeding-the-random-number-generator-in-javascript
+function mulberry32(a) {
+    return function() {
+      var t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+}
+
 if (require.main === module) {
+    //seed random for the test.
+    Math.random = mulberry32(0);
+
+    // for( let i = 0; i < 5; ++i ){
+    //     console.log(Math.random());
+    // }
+
+
     //Do some tests of the module
 
     // const test_data = [
@@ -365,7 +383,7 @@ if (require.main === module) {
 
     const model = new JLBoost( {});
 
-    model.train( {xy_data: test_data, y_index:'y', n_steps:3000, tree_depth:10, talk:true })
+    model.train( {xy_data: test_data, y_index:'y', n_steps:5, tree_depth:2, talk:true })
 
     const model_results = model.predict( test_data );
 
