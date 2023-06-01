@@ -1,10 +1,19 @@
 let range = (n: number, offset: number) =>
   Array.from(Array(n).keys()).map((n) => n + offset);
 
-class TreeLeaf {
+abstract class BranchOrLeaf{
+    abstract predict_single(data: {[key: string]:number|string}, categorical_categories: string[]): number;
+
+    abstract predict(xy_data: {[key: string]: number|string}[], categorical_categories: string[]): number[];
+
+    abstract to_dict(): {[key:string]:any};
+}
+
+class TreeLeaf extends BranchOrLeaf{
     private average: number;
 
     constructor(average: number) {
+        super();
         this.average = average;
     }
 
@@ -16,6 +25,9 @@ class TreeLeaf {
         return [...Array(xy_data.length)].map(() => this.average);
     }
 
+    to_dict(): {[key:string]:any}{
+        return {'average': this.average};
+    }
 }
 
 const MIDDLE_SPLIT_FAVOR: number = 0.25;
@@ -28,17 +40,29 @@ interface TreeBranch__random_tree__NamedParameters{
     categorical_categories: string[],
 }
 
-class TreeBranch {
-    private left_side: TreeBranch | TreeLeaf | null;
-    private right_side: TreeBranch | TreeLeaf | null;
+class TreeBranch extends BranchOrLeaf {
+    private left_side: BranchOrLeaf | null;
+    private right_side: BranchOrLeaf | null;
     public feature_index: string | null;
     public split_value: any | null;
 
     constructor() {
+        super();
         this.left_side = null;
         this.right_side = null;
         this.feature_index = null;
         this.split_value = null;
+    }
+
+    to_dict(): {[key:string]:any}{
+        const result: {[key:string]:any} = {};
+
+        result['feature_index'] = this.feature_index;
+        result['split_value'] = this.split_value;
+        result['left_side'] = this.left_side.to_dict();
+        result['right_side'] = this.right_side.to_dict();
+
+        return result;
     }
 
     predict_single( data: {[key: string]:number|string}, categorical_categories: string[]): number {
@@ -324,9 +348,9 @@ if (require.main === module) {
     //seed random for the test.
     Math.random = mulberry32(0);
 
-    // for( let i = 0; i < 5; ++i ){
-    //     console.log(Math.random());
-    // }
+    for( let i = 0; i < 5; ++i ){
+        console.log(Math.random());
+    }
 
 
     //Do some tests of the module
@@ -397,4 +421,8 @@ if (require.main === module) {
     });
 
     console.table( with_prediction );
+
+    //print first tree to screen.
+    const first_tree_as_dict = model.trees[0].to_dict();
+    console.log(JSON.stringify(first_tree_as_dict, null,2));
 }
