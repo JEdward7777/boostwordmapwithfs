@@ -643,6 +643,95 @@ export class JLBoostMultiWordMap extends JLBoostWordMap{
     }
 }
 
+//This version is the same as JLBoostMultiWordMap except that it includes the ngram output of wordmap
+//as extra information.
+export class JLBoostMultiWordMap2 extends JLBoostWordMap{
+    //collect_boost_training_data needs to not use is_correct_prediction but something like is_sub_correct_prediciton
+    collect_boost_training_data( source_text: {[key: string]: Token[]}, 
+        target_text: {[key: string]: Token[]}, 
+        alignments: {[key: string]: Alignment[] }, 
+        ratio_of_incorrect_to_keep: number = .1 ): [Prediction[], Prediction[]] {
+            const correct_predictions: Prediction[] = [];
+            const incorrect_predictions: Prediction[] = [];
+            
+            Object.entries( alignments ).forEach( ([key,verse_alignments]) => {
+                //collect every prediction
+            const every_prediction: Prediction[] = (this as any).engine.run( source_text[key], target_text[key] )
+
+            //iterate through them
+            every_prediction.forEach( (prediction: Prediction) => {
+
+                //Don't grade a null assignment as correct unless it is right.
+                //subset doesn't count.
+                const is_null_suggestion = (prediction.target.tokenLength === 0 || prediction.source.tokenLength === 0 );
+
+                let is_correct = is_null_suggestion?
+                        is_correct_prediction(prediction,verse_alignments):
+                        is_part_of_correct_prediction(prediction,verse_alignments);
+
+                if( is_correct ){
+                    correct_predictions.push( prediction );
+                }else if( Math.random() < ratio_of_incorrect_to_keep*this.ratio_of_training_data ){
+                    incorrect_predictions.push( prediction );
+                }
+            });
+
+        });
+        
+        //return the collected data.
+        return [correct_predictions, incorrect_predictions];
+    }
+    
+    //catboost_score needs to be changed to not just return what was given but instead assemble it into ngrams.
+    catboost_score( predictions: Prediction[]): Prediction[] { 
+        //now run the set score on all of them.
+        predictions.forEach( (p: Prediction) => {
+            const numerical_features = jlboost_prediction_to_feature_dict(p);
+            const confidence = this.jlboost_model.predict_single( numerical_features );
+            p.setScore("confidence", confidence);
+        });
+
+        return predictions;
+    }
+
+
+        /**
+     * Predicts the word alignments between the sentences.
+     * @param {string} sourceSentence - a sentence from the source text
+     * @param {string} targetSentence - a sentence from the target text
+     * @param {number} maxSuggestions - the maximum number of suggestions to return
+     * @param minConfidence - the minimum confidence score required for a prediction to be used
+     * @return {Suggestion[]}
+     */
+    public predict(sourceSentence: string | Token[], targetSentence: string | Token[], maxSuggestions: number = 1, minConfidence: number = 0.1): Suggestion[] {
+        let sourceTokens = [];
+        let targetTokens = [];
+
+        if (typeof sourceSentence === "string") {
+            sourceTokens = Lexer.tokenize(sourceSentence);
+        } else {
+            sourceTokens = sourceSentence;
+        }
+
+        if (typeof targetSentence === "string") {
+            targetTokens = Lexer.tokenize(targetSentence);
+        } else {
+            targetTokens = targetSentence;
+        }
+
+        const engine_run = (this as any).engine.run(sourceTokens, targetTokens);
+        const predictions = this.catboost_score( engine_run );
+        const ngram_predictions = create_ngram_predictions( predictions );
+
+        const suggestion = ngram_predictions.reduce( (s:Suggestion, p:Prediction) => {
+            s.addPrediction(p);
+            return s;
+        }, new Suggestion() );
+
+        return [suggestion];
+    }
+}
+
 
 
 class LinkGroup{
@@ -712,12 +801,17 @@ class LinkGroup{
 
         const links_without_weakest : {[key:string]:{strength:number,target:string}[]} = {};
         for( const [source, links] of Object.entries(this.token_links) ){
-            //if the source doesn't match, just copy all the links.
-            if( source !== weakest_source ){
+            //if the source doesn't match or we have already broken a link, just copy all the links.
+            if( source !== weakest_source  ){
                 links_without_weakest[source] = links;
             }else{
-                //if the source does match, filter the targets.
-                links_without_weakest[source] = links.filter( (link) => link.target !== weakest_target );
+                //if the source does match, drop the first link matching the selected strength.
+                links_without_weakest[source] = [];
+                for( const link of links ){
+                    if( link.strength != weakest_strength || link.target !== weakest_target ){
+                        links_without_weakest[source].push( link )
+                    }
+                }
             }
         }
 
@@ -798,24 +892,56 @@ function token_to_hash(t : Token): string{
     return `${t.toString()}:${t.occurrence}:${t.occurrences}`;
 }
 
+function dedup_hash_links( hash_links: {[key: string]: { strength: number, target: string}[]} ): {[key: string]: { strength: number, target: string}[]} {
 
+    const source_target_hashed: {[key: string]: { source: string, strength: number, target: string}} = {};
+
+    Object.entries( hash_links ).forEach( ([source,links]) => {
+        links.forEach( (link) => {
+            const source_target_key = `${source}->${link.target}`;
+            //take only the strongest link.
+            if( !(source_target_key in source_target_hashed) || source_target_hashed[source_target_key].strength < link.strength ){
+                source_target_hashed[source_target_key] = {
+                    source: source,
+                    strength: link.strength,
+                    target: link.target
+                };
+            }
+        });
+    });
+
+    //now convert the format back.
+    const result: {[key: string]: { strength: number, target: string}[]} = {};
+    Object.values( source_target_hashed ).forEach( (link) => {
+        if( !(link.source in result) ){
+            result[link.source] = [];
+        }
+        result[link.source].push({
+            strength: link.strength,
+            target: link.target
+        });
+    });
+
+    return result;
+}
 
 function create_ngram_predictions( scored_predictions: Prediction[] ): Prediction[]{
     
 
     const source_token_hashes: {[key: string]: Token} = {};
     const target_token_hashes: {[key: string]: Token} = {};
-    const token_hash_links: {[key: string]: { strength: number, target: string}[]} = {};
+
+    const token_hash_links_with_dupes: {[key: string]: { strength: number, target: string}[]} = {};
     scored_predictions.forEach( (p: Prediction) => {
         p.source.getTokens().forEach( (t: Token) => source_token_hashes[token_to_hash(t)] = t );
         p.target.getTokens().forEach( (t: Token) => target_token_hashes[token_to_hash(t)] = t );
         p.source.getTokens().forEach( (source: Token) => {
             p.target.getTokens().forEach( (target: Token) => {
                 const source_hash = token_to_hash(source);
-                if(!(source_hash in token_hash_links)){
-                    token_hash_links[source_hash]=[];
+                if(!(source_hash in token_hash_links_with_dupes)){
+                    token_hash_links_with_dupes[source_hash]=[];
                 }
-                token_hash_links[source_hash].push({
+                token_hash_links_with_dupes[source_hash].push({
                     strength: p.getScore("confidence"),
                     target: token_to_hash(target)
                 });
@@ -823,7 +949,10 @@ function create_ngram_predictions( scored_predictions: Prediction[] ): Predictio
         });
     });
 
-    const link_groups = break_into_groups( token_hash_links );
+    const token_hash_links_deduped = dedup_hash_links( token_hash_links_with_dupes );
+
+
+    const link_groups = break_into_groups( token_hash_links_deduped );
 
 
     const result: Prediction[] = [];

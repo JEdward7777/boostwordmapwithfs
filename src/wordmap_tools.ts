@@ -276,38 +276,45 @@ export function is_part_of_correct_prediction( suggested_mapping: Prediction, ma
 
         const manual_mapping_source = manual_mapping.sourceNgram.getTokens();
         
-        //const suggested_mapping_source = suggested_mapping.source.getTokens();
-        const suggested_source_word = suggested_mapping.source.getTokens()[0]
+        const suggested_mapping_source = suggested_mapping.source.getTokens();
         const manual_mapping_target = manual_mapping.targetNgram.getTokens();
-        //const suggested_mapping_target = suggested_mapping.target.getTokens();
-        const suggested_target_word = suggested_mapping.target.getTokens()[0];
+        const suggested_mapping_target = suggested_mapping.target.getTokens();
 
 
         //now check the source ngram is a subset of the prediction
-        let found_source = false;
-        for( let source_ngram_i = 0; source_ngram_i < manual_mapping_source.length && !found_source; ++source_ngram_i ){
-            const manual_word = manual_mapping_source[source_ngram_i];
+        //every suggested source word has to be in the manual source for us to have found it.
+        for( let suggested_source_ngram_i = 0; suggested_source_ngram_i < suggested_mapping_source.length; ++suggested_source_ngram_i ){
+            const suggested_source_word = suggested_mapping_source[suggested_source_ngram_i];
 
-            if( manual_word.toString()  == suggested_source_word.toString() &&
-                    manual_word.occurrence  == suggested_source_word.occurrence &&
-                    manual_word.occurrences == suggested_source_word.occurrences ){
-                found_source = true;
+            let found_source = false;
+            for( let source_ngram_i = 0; source_ngram_i < manual_mapping_source.length && !found_source; ++source_ngram_i ){
+                const manual_word = manual_mapping_source[source_ngram_i];
+
+                if( manual_word.toString()  == suggested_source_word.toString() &&
+                        manual_word.occurrence  == suggested_source_word.occurrence &&
+                        manual_word.occurrences == suggested_source_word.occurrences ){
+                    found_source = true;
+                }
             }
+            if( !found_source ) continue mappingLoop;
         }
-        if( !found_source ) continue mappingLoop;
 
         //and the target ngram.
-        let found_target = false;
-        for( let target_ngram_i = 0; target_ngram_i < manual_mapping_target.length && !found_target; ++target_ngram_i ){
-            const manual_word = manual_mapping_target[target_ngram_i];
+        for( let suggested_target_ngram_i = 0; suggested_target_ngram_i < suggested_mapping_target.length; ++suggested_target_ngram_i ){
+            const suggested_target_word = suggested_mapping_target[suggested_target_ngram_i];
 
-            if( manual_word.toString() == suggested_target_word.toString() &&
-                    manual_word.occurrence == suggested_target_word.occurrence &&
-                    manual_word.occurrences == suggested_target_word.occurrences ){
-                found_target = true;
+            let found_target = false;
+            for( let target_ngram_i = 0; target_ngram_i < manual_mapping_target.length && !found_target; ++target_ngram_i ){
+                const manual_word = manual_mapping_target[target_ngram_i];
+
+                if( manual_word.toString() == suggested_target_word.toString() &&
+                        manual_word.occurrence == suggested_target_word.occurrence &&
+                        manual_word.occurrences == suggested_target_word.occurrences ){
+                    found_target = true;
+                }
             }
+            if( !found_target ) continue mappingLoop;
         }
-        if( !found_target ) continue mappingLoop;
 
         //We found this mapping so no need to keep looking for it.
         return true;
