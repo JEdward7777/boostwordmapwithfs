@@ -541,7 +541,7 @@ export class JLBoostWordMap extends BoostWordMap{
 
         
 
-        this.jlboost_model = new JLBoost();
+        this.jlboost_model = new JLBoost({});
 
         return new Promise<void>((resolve) => {
             this.jlboost_model.train({
