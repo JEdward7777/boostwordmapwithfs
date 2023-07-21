@@ -965,3 +965,45 @@ function create_ngram_predictions( scored_predictions: Prediction[] ): Predictio
 
     return result;
 }
+
+export class MorphJLBoostWordMap extends BoostWordMap{
+    protected jlboost_model: JLBoost | null = null;
+
+    catboost_score( predictions: Prediction[]): Prediction[] { 
+        for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
+            const numerical_features = morph_code_prediction_to_feature_dict(predictions[prediction_i]);
+            const confidence = this.jlboost_model.predict_single( numerical_features );
+            predictions[prediction_i].setScore("confidence", confidence);
+        }
+        return Engine.sortPredictions(predictions);
+    }
+
+    do_boost_training( correct_predictions: Prediction[], incorrect_predictions: Prediction[] ): Promise<void>{
+        //first collect the data to train on.
+        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: number|string}{
+            const result = morph_code_prediction_to_feature_dict(prediction);
+            result["output"] = is_correct?1:0;
+            return result;
+        };
+
+
+        const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
+            .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
+
+        
+
+        this.jlboost_model = new JLBoost({ categorical_catagories: morph_code_catboost_cat_feature_order });
+
+        return new Promise<void>((resolve) => {
+            this.jlboost_model.train({
+                xy_data:training_data,
+                y_index:"output",
+                n_steps:1000,
+                tree_depth:12,//7,
+                //tree_depth:2,
+                talk:true,
+            });
+            resolve();
+        });
+    }
+}

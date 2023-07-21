@@ -327,8 +327,9 @@ export function grade_mapping_method( source_sentence_tokens_dict : { [key: stri
                                     manual_mappings_dict: { [key: string]:  Alignment[] }, 
                                     output_stream: Writable,
                                     mapping_function: (from_tokens: Token[], to_tokens: Token[]) => Suggestion[] ){
-    output_stream.write( "verse id,num_manual_mappings,num_suggested_mappings,num_correct_mappings\n");
+    output_stream.write( "verse id,num_manual_mappings,num_suggested_mappings,num_correct_mappings,ratio_correct\n");
 
+    let ratio_correct_sum : number = 0;
     Object.entries(target_sentence_tokens_dict).forEach(([sentence_key,target_sentence_tokens]) => {
         if( sentence_key in source_sentence_tokens_dict ){
             const source_sentence_tokens = source_sentence_tokens_dict[sentence_key];
@@ -345,7 +346,9 @@ export function grade_mapping_method( source_sentence_tokens_dict : { [key: stri
                     num_correct_mappings++;
                 }
             }
-            output_stream.write( `${sentence_key},${manual_mappings.length},${firstPredictions.length},${num_correct_mappings}\n`)
+            const ratio_correct = num_correct_mappings/manual_mappings.length;
+            ratio_correct_sum += ratio_correct
+            output_stream.write( `${sentence_key},${manual_mappings.length},${firstPredictions.length},${num_correct_mappings},${ratio_correct}\n`)
 
             if( global.gc ){
                 global.gc();
@@ -353,4 +356,7 @@ export function grade_mapping_method( source_sentence_tokens_dict : { [key: stri
         }
     
     });
+
+    const average_ratio_correct = ratio_correct_sum/Object.keys(target_sentence_tokens_dict).length;
+    console.log( `average_ratio_correct: ${average_ratio_correct}`)
 }

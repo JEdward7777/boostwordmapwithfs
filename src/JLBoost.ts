@@ -69,7 +69,7 @@ class TreeBranch extends BranchOrLeaf {
         let follow_left_side = false;
 
         //see if we are a categorical split or a numerical split.
-        if( categorical_categories.includes[this.feature_index] ){
+        if( categorical_categories.includes(this.feature_index) ){
             follow_left_side = data[this.feature_index] === this.split_value;
         }else{
             follow_left_side = data[this.feature_index] <= this.split_value;
@@ -249,15 +249,15 @@ export class JLBoost {
         return output;
     }
 
-    predict_single( data: {[key: string]:number} ): number{
+    predict_single( data: {[key: string]:number|string} ): number{
         let output: number = 0;
 
         for( const tree of this.trees){
             const treePrediction = tree.predict_single( data, this.categorical_categories );
-            output += treePrediction * this.learning_rate;
+            output += treePrediction;
         }
 
-        return output;
+        return output * this.learning_rate;
     }
 
 
@@ -305,7 +305,7 @@ export class JLBoost {
                 }
             }
         }
-        xy_data = xy_data.map( row => Object.fromEntries(Object.entries(row).filter(([feature,value]) => !(feature in featuresToDrop))));
+        xy_data = xy_data.map( row => Object.fromEntries(Object.entries(row).filter(([feature,value]) => !featuresToDrop.includes(feature))));
 
         let ignored_categories: string[] = [];
         let last_loss: number | null = null;

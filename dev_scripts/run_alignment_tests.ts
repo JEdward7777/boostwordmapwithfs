@@ -5,7 +5,7 @@ import {ChapterVerse, add_book_alignment_to_wordmap, extract_alignment_frequency
 import WordMap, {Suggestion,Alignment} from "wordmap";
 import { createWriteStream } from 'fs';
 import {Token} from "wordmap-lexer";
-import {PlaneWordMap, CatBoostWordMap, MorphCatBoostWordMap, FirstLetterBoostWordMap, JLBoostWordMap, JLBoostMultiWordMap, JLBoostMultiWordMap2 } from "../src/boostwordmap_tools";
+import {PlaneWordMap, CatBoostWordMap, MorphCatBoostWordMap, FirstLetterBoostWordMap, JLBoostWordMap, JLBoostMultiWordMap, JLBoostMultiWordMap2, MorphJLBoostWordMap } from "../src/boostwordmap_tools";
 
 
 function run_plane_wordmap_test(){
@@ -165,7 +165,8 @@ function run_catboost_test_with_alignment_adding_method( data: SourceTargetData,
 }
 
 function run_configurable_wordmap_test( alignment_adding_method: number, boost_type: string, lang_selections: string, ratio_of_training_data: number ){
-    const boostMap = (boost_type === "jlboost_mwm2" )? new JLBoostMultiWordMap2   ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
+    const boostMap = (boost_type === "morph_jlboost")? new MorphJLBoostWordMap    ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
+                     (boost_type === "jlboost_mwm2" )? new JLBoostMultiWordMap2   ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "jlboost_mwm" )?  new JLBoostMultiWordMap    ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "jlboost"    )?  new JLBoostWordMap         ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "first_letter")? new FirstLetterBoostWordMap({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
@@ -210,7 +211,10 @@ if (require.main === module) {
     //run_configurable_wordmap_test( 2, "jlboost", "greek-english-mat", .9 )
     //run_configurable_wordmap_test( 4, "jlboost", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "jlboost", "heb-english-gen", 1 )
-    run_configurable_wordmap_test( 2, "jlboost_mwm2", "heb-english-gen", 1 )
+    //run_configurable_wordmap_test( 2, "jlboost_mwm2", "heb-english-gen", 1 )
     //run_configurable_wordmap_test( 2, "jlboost_mwm", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "jlboost_mwm2", "greek-spanish-tit", 1 )
+    //run_configurable_wordmap_test( 2, "morph_jlboost", "greek-spanish-tit", 1 )
+
+    run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-gen", 1 )
 }
