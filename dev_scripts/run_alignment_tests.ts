@@ -192,7 +192,6 @@ function run_configurable_wordmap_test( alignment_adding_method: number, boost_t
     run_catboost_test_with_alignment_adding_method( selected_data, boostMap, csv_code, add_alignment_method );
 }
 
-
 if (require.main === module) {
     // run_configurable_wordmap_test( 2, "plane", "heb-english-gen", .1 )
     //run_configurable_wordmap_test( 2, "morph_boost", "heb-english-gen", .1 )
