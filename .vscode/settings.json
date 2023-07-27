@@ -2,12 +2,14 @@
     "typescript.tsdk": "./node_modules/typescript/lib",
     "cSpell.words": [
         "boostwordmap",
+        "boostwordmapwithfs",
         "dedup",
         "deduped",
         "jlboost",
         "Ngram",
         "strongs",
         "ugnt",
-        "usfmjs"
+        "usfmjs",
+        "wordmapbooster"
     ]
 }

@@ -1,9 +1,9 @@
-import { BoostWordMap, catboost_feature_order, morph_code_catboost_cat_feature_order, morph_code_prediction_to_feature_dict } from "../src/boostwordmap_tools";
+import { BoostWordMap, catboost_feature_order, morph_code_catboost_cat_feature_order, morph_code_prediction_to_feature_dict } from "wordmapbooster/dist/boostwordmap_tools";
 import * as catboost from "catboost";
 import { Prediction, Engine } from 'wordmap';
 import {Token} from "wordmap-lexer";
 import { saveJson } from "./json_tools";
-import { listToDictOfLists } from "../src/misc_tools";
+import { listToDictOfLists } from "wordmapbooster/dist/misc_tools";
 import * as path from 'path';
 import { spawn } from 'child_process';
 

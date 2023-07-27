@@ -1,7 +1,7 @@
 import * as fs from "fs-extra";
 import * as AdmZip from 'adm-zip';
 import * as path from 'path';
-import { JsonDict } from "../src/misc_tools";
+import { JsonDict } from "wordmapbooster/dist/misc_tools";
 
 
 

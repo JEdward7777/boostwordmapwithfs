@@ -1,1 +1,1 @@
-export {JLBoostWordMap} from './src/boostwordmap_tools';
+export {JLBoostWordMap} from 'wordmapbooster/dist/boostwordmap_tools';

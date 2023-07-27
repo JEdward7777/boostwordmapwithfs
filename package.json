@@ -1,7 +1,7 @@
 {
-  "name": "boostwordmap",
+  "name": "boostwordmapwithfs",
   "version": "1.0.0",
-  "description": "Adds an AI boost to wordmap. Wordmap is a tool for helping word alignment between a source and target langauge.",
+  "description": "Adds an AI boost to wordmap. Wordmap is a tool for helping word alignment between a source and target language.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -9,12 +9,12 @@
   ],
   "devDependencies": {
     "@types/node": "^18.16.2",
+    "fs-extra": "^11.1.1",
     "typescript": "^5.0.4"
   },
   "dependencies": {
     "adm-zip": "0.4.13",
     "catboost": "^1.25.1",
-    "fs-extra": "4.0.3",
     "usfm-js": "3.4.2",
     "wordmap": "0.8.2",
     "wordmap-lexer": "0.3.6"
