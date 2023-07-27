@@ -2,7 +2,7 @@
 //import WordMap from "../";
 import WordMap from "wordmap";
 
-import {recursive_json_load, saveJson} from "../src/json_tools";
+import {recursive_json_load, saveJson} from "./json_tools";
 
 import {ChapterVerse, add_book_alignment_to_wordmap, extract_alignment_frequency, compile_verse_text_pair} from "../src/wordmap_tools";
 

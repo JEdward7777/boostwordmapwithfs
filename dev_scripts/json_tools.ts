@@ -1,11 +1,9 @@
 import * as fs from "fs-extra";
 import * as AdmZip from 'adm-zip';
 import * as path from 'path';
+import { JsonDict } from "../src/misc_tools";
 
 
-export interface JsonDict {
-    [key: string]: any;
-}
 
 
 
@@ -70,23 +68,6 @@ export function recursive_json_load(filepath: string): JsonDict {
     }
     return contents;
 }
-
-export function listToDictOfLists(list: {[key: string]: number|string}[]): {[key: string]: (number|string)[]} {
-    const dict: {[key: string]: (number|string)[]} = {};
-    
-    for (const item of list) {
-      for (const key in item) {
-        if (key in item) {
-          if (!(key in dict)) {
-            dict[key] = [];
-          }
-          dict[key].push(item[key]);
-        }
-      }
-    }
-    
-    return dict;
-  }
 
 
 export function saveJson(obj: object, path: string): void {

@@ -2,10 +2,6 @@ import {WordMapProps} from "wordmap/core/WordMap"
 import WordMap, { Alignment, Ngram, Suggestion, Prediction, Engine } from 'wordmap';
 import Lexer,{Token} from "wordmap-lexer";
 import {is_correct_prediction, is_part_of_correct_prediction} from "./wordmap_tools"; 
-import {saveJson, listToDictOfLists} from "./json_tools";
-import { spawn } from 'child_process';
-import * as path from 'path';
-import * as catboost from "catboost";
 import {JLBoost} from "./JLBoost";
 
 
@@ -35,45 +31,6 @@ export const catboost_feature_order : string[] = [
     "lemmaUniqueness",
 ];
 
-
-
-function run_catboost_training( training_file: string, model_output_file: string ): Promise<string>{
-    return new Promise<string>((resolve, reject) => {
-        // path to the python script
-        const pythonScriptPath = path.resolve("./dev_scripts/catboost_training/train_catboost.py");
-
-        // spawn a new process to run the python script
-        const pythonProcess = spawn(path.resolve( './dev_scripts/catboost_training/venv/bin/python' ), 
-            [pythonScriptPath, training_file, model_output_file], {
-            shell: true, // use the shell to activate the virtual environment
-            env: {
-                ...process.env, // inherit the environment variables from the current process
-                PYTHONPATH: process.env.PYTHONPATH + ':' + path.resolve('./dev_scripts/catboost_training/venv/lib/python3.10/site-packages'), // add the virtual environment to the PYTHONPATH
-            },
-        });
-
-        // pipe the output of the python script to the console
-        pythonProcess.stdout.pipe(process.stdout);
-        pythonProcess.stderr.pipe(process.stderr);
-
-        pythonProcess.on('error', (error) => {
-            reject(new Error(`Failed to start subprocess: ${error.message}`));
-        });
-
-        // listen for the 'exit' event of the python process
-        pythonProcess.on('exit', (code: number, signal) => {
-            if( code === 0 ){
-                resolve(model_output_file);
-            }else{
-                reject(new Error(`Python subprocess failed with exit code ${code} and signal ${signal}`));
-            }
-        });
-    });
-}
-
-function scores_to_catboost_features( scores: {[key:string]:number} ){
-    return catboost_feature_order.map( (feature_name) => ( (scores[feature_name] === undefined)?0:scores[feature_name] ) );
-}
 
 export abstract class AbstractWordMapWrapper extends WordMap{
     constructor(opts?: WordMapProps){
@@ -129,7 +86,7 @@ export abstract class BoostWordMap extends AbstractWordMapWrapper{
     // 1 Do the alignment training with no verses included.  Then add the verses.
     // 2 Do the alignment training with half of the verses included. Then add the remainder.
     // 3 Do the alignment training with all the verses included already.
-    // 4 Add the alignment memory for the first half and collect training data for the second half and then reverse to collect the trainnig data for the first half.
+    // 4 Add the alignment memory for the first half and collect training data for the second half and then reverse to collect the training data for the first half.
 
     add_alignments_1( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
         // 1 Do the alignment training with no verses included.  Then add the verses.
@@ -176,7 +133,7 @@ export abstract class BoostWordMap extends AbstractWordMapWrapper{
     }
 
     add_alignments_4( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
-        // 4 Add the alignment memory for the first half and collect training data for the second half and then reverse to collect the trainnig data for the first half.
+        // 4 Add the alignment memory for the first half and collect training data for the second half and then reverse to collect the training data for the first half.
 
         //split the alignment data into two groups.
         const alignments_split_a = Object.fromEntries(Object.entries(alignments).filter((_, i) => i % 2 === 0));
@@ -231,7 +188,7 @@ export abstract class BoostWordMap extends AbstractWordMapWrapper{
     }
 }
 
-//The point of this class is to make a way of interract with WordMap
+//The point of this class is to make a way of interacting with WordMap
 //which uses the same extended interface of the CatBoostWordMap interface.
 export class PlaneWordMap extends AbstractWordMapWrapper{
     setTrainingRatio(ratio_of_training_data: number) { /*do nothing.*/ }
@@ -260,79 +217,7 @@ export class PlaneWordMap extends AbstractWordMapWrapper{
 
 
 
-export class CatBoostWordMap extends BoostWordMap{
 
-    protected catboost_model: catboost.Model | null = null;
-
-    load_model_file( model_file: string ):void{
-        this.catboost_model = new catboost.Model();
-        this.catboost_model.loadModel( model_file );
-    }
-
-    catboost_score( predictions: Prediction[]): Prediction[] { 
-        for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
-            const input_features_array = scores_to_catboost_features(predictions[prediction_i].getScores());
-            //const confidence = this.catboost_model.predict( [input_features_array], [empty_categorical_features] )[0];
-            const confidence = this.catboost_model.predict( [input_features_array], [[0]] )[0];
-            predictions[prediction_i].setScore("confidence", confidence);
-        }
-        //This is how non-catboost confidence calculation is done:
-        // const results = Engine.calculateConfidence(
-        //      predictions,
-        //      (map as any).engine.alignmentMemoryIndex
-        // );
-        return Engine.sortPredictions(predictions);
-    }
-    
-    save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
-        //first dump the data out to a json file
-        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: string}{
-            const result = {};
-            catboost_feature_order.forEach( (feature_name) => {
-                try {
-                    result[feature_name] = prediction.getScore(feature_name) ?? 0;
-                } catch (error) {
-                    if (error.message.startsWith("Unknown score key")) {
-                        result[feature_name] = 0;
-                    } else {
-                        throw error; // re-throw the error if it's not the expected error type
-                    }
-                }
-            });
-            result["output"] = is_correct?1:0;
-            return result;
-        };
-
-
-        const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
-            .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
-
-        saveJson( {
-            "catboost_feature_order": catboost_feature_order,
-            "catboost_cat_feature_order": [],
-            "training_data": listToDictOfLists(training_data),
-        },  filename);
-    }
-
-    
-    do_boost_training( correct_predictions: Prediction[], incorrect_predictions: Prediction[] ): Promise<void>{
-        this.save_training_to_json( correct_predictions, incorrect_predictions, "./dev_scripts/catboost_training/catboost_training_data.json" );
-
-        //and now trigger a training by running a python command.
-        return new Promise<void>((resolve, reject) => {
-            run_catboost_training( path.resolve("./dev_scripts/catboost_training/catboost_training_data.json"), 
-                                    path.resolve("./dev_scripts/catboost_training/catboost_model.cbm" ) ).then( (model_output_file) => {
-                this.load_model_file( model_output_file );
-                resolve();
-            }).catch( (error) => {
-                reject( error );
-            });
-        });
-        
-    }
-
-
-}
 
 
 export const morph_code_catboost_cat_feature_order : string[] = [
@@ -346,7 +231,13 @@ export const morph_code_catboost_cat_feature_order : string[] = [
     "src_morph_7",
 ];
 
-function morph_code_prediction_to_feature_dict( prediction: Prediction ): {[key:string]:(number|string)}{
+/**
+ * Generates a feature dictionary from a code prediction.
+ *
+ * @param {Prediction} prediction - The code prediction to generate the feature dictionary from.
+ * @return {{[key:string]:(number|string)}} - The generated feature dictionary.
+ */
+export function morph_code_prediction_to_feature_dict( prediction: Prediction ): {[key:string]:(number|string)}{
     const result: {[key: string]:number|string} = {};
     const scores = prediction.getScores();
     catboost_feature_order.forEach( key => {
@@ -372,127 +263,8 @@ function morph_code_prediction_to_feature_dict( prediction: Prediction ): {[key:
     })
     return result;
 }
-function morph_code_prediction_to_catboost_features( prediction: Prediction ):[number[],string[]]{
-
-    const as_dict: {[key: string]:number|string} = morph_code_prediction_to_feature_dict(prediction);
-
-    const numerical_features : number[] = <number[]>catboost_feature_order.map( key => as_dict[key] ?? 0 );
-    const cat_features : string[] = <string[]>morph_code_catboost_cat_feature_order.map( key => as_dict[key] ?? "" );
-
-    return [numerical_features,cat_features];
-}
 
 
-export class MorphCatBoostWordMap extends CatBoostWordMap{
-    catboost_score( predictions: Prediction[]): Prediction[] { 
-        for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
-            const [numerical_features,cat_features] = morph_code_prediction_to_catboost_features(predictions[prediction_i]);
-            const confidence = this.catboost_model.predict( [numerical_features], [cat_features] )[0];
-            predictions[prediction_i].setScore("confidence", confidence);
-        }
-        return Engine.sortPredictions(predictions);
-    }
-
-    save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
-        //first dump the data out to a json file
-        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: number|string}{
-            const result = morph_code_prediction_to_feature_dict(prediction);
-            result["output"] = is_correct?1:0;
-            return result;
-        };
-
-
-        const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
-            .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
-
-        saveJson( {
-            "catboost_feature_order": catboost_feature_order,
-            "catboost_cat_feature_order":morph_code_catboost_cat_feature_order,
-            "training_data": listToDictOfLists(training_data),
-        },  filename);
-    }
-}
-
-export const first_letter_catboost_cat_feature_order : string[] = [
-    "src_morph_0",
-    "src_morph_1",
-    "src_morph_2",
-    "src_morph_3",
-    "src_morph_4",
-    "src_morph_5",
-    "src_morph_6",
-    "src_morph_7",
-    "source_first_letter",
-    "target_first_letter",
-];
-
-function first_letter_prediction_to_feature_dict( prediction: Prediction ): {[key:string]:(number|string)}{
-    const result: {[key: string]:number|string} = {};
-    const scores = prediction.getScores();
-    catboost_feature_order.forEach( key => {
-        result[key] = scores[key] ?? 0;
-    });
-
-    prediction.alignment.sourceNgram.getTokens().forEach( (token:Token) => {
-        token.morph.split(",").forEach( (morph_piece,morph_index) =>{
-            const categorical_key = `src_morph_${morph_index}`;
-            if( first_letter_catboost_cat_feature_order.includes( categorical_key) ){
-                if( !(categorical_key in result) ){
-                    result[categorical_key] = ''
-                }
-    
-                result[categorical_key] += morph_piece;
-            }
-        });
-    });
-    result["source_first_letter"] = prediction.alignment.sourceNgram.getTokens()?.[0]?.toString()?.[0] || "";
-    result["target_first_letter"] = prediction.alignment.targetNgram.getTokens()?.[0]?.toString()?.[0] || "";
-    first_letter_catboost_cat_feature_order.forEach( key => {
-        if( !(key in result ) ){
-            result[key] = "";
-        }
-    })
-    return result;
-}
-function first_letter_prediction_to_catboost_features( prediction: Prediction ):[number[],string[]]{
-
-    const as_dict: {[key: string]:number|string} = first_letter_prediction_to_feature_dict(prediction);
-
-    const numerical_features : number[] = <number[]>catboost_feature_order.map( key => as_dict[key] ?? 0 );
-    const cat_features : string[] = <string[]>first_letter_catboost_cat_feature_order.map( key => as_dict[key] ?? "" );
-
-    return [numerical_features,cat_features];
-}
-
-export class FirstLetterBoostWordMap extends CatBoostWordMap{
-    catboost_score( predictions: Prediction[]): Prediction[] { 
-        for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
-            const [numerical_features,cat_features] = first_letter_prediction_to_catboost_features(predictions[prediction_i]);
-            const confidence = this.catboost_model.predict( [numerical_features], [cat_features] )[0];
-            predictions[prediction_i].setScore("confidence", confidence);
-        }
-        return Engine.sortPredictions(predictions);
-    }
-
-    save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
-        //first dump the data out to a json file
-        const prediction_to_dict = function( prediction: Prediction, is_correct: boolean ): {[key: string]: number|string}{
-            const result = first_letter_prediction_to_feature_dict(prediction);
-            result["output"] = is_correct?1:0;
-            return result;
-        };
-
-
-        const training_data = correct_predictions.map( p => prediction_to_dict(p,true) )
-            .concat( incorrect_predictions.map( p => prediction_to_dict(p,false) ) );
-
-        saveJson( {
-            "catboost_feature_order": catboost_feature_order,
-            "catboost_cat_feature_order":first_letter_catboost_cat_feature_order,
-            "training_data": listToDictOfLists(training_data),
-        },  filename);
-    }
-}
 
 
 function jlboost_prediction_to_feature_dict( prediction: Prediction ): {[key:string]:number}{
@@ -559,7 +331,7 @@ export class JLBoostWordMap extends BoostWordMap{
 
 
 export class JLBoostMultiWordMap extends JLBoostWordMap{
-    //collect_boost_training_data needs to not use is_correct_prediction but something like is_sub_correct_prediciton
+    //collect_boost_training_data needs to not use is_correct_prediction but something like is_sub_correct_prediction
     collect_boost_training_data( source_text: {[key: string]: Token[]}, 
         target_text: {[key: string]: Token[]}, 
         alignments: {[key: string]: Alignment[] }, 
@@ -646,7 +418,7 @@ export class JLBoostMultiWordMap extends JLBoostWordMap{
 //This version is the same as JLBoostMultiWordMap except that it includes the ngram output of wordmap
 //as extra information.
 export class JLBoostMultiWordMap2 extends JLBoostWordMap{
-    //collect_boost_training_data needs to not use is_correct_prediction but something like is_sub_correct_prediciton
+    //collect_boost_training_data needs to not use is_correct_prediction but something like is_sub_correct_prediction
     collect_boost_training_data( source_text: {[key: string]: Token[]}, 
         target_text: {[key: string]: Token[]}, 
         alignments: {[key: string]: Alignment[] }, 
@@ -876,7 +648,7 @@ function break_into_groups( token_links: {[key: string]: { strength: number, tar
 
     let result :LinkGroup[] = [];
 
-    //keep breaking apart the groups until they are all below ngramsize of max_ngram_size
+    //keep breaking apart the groups until they are all below ngram size of max_ngram_size
     while( to_process.length > 0 ){
         const link_group = to_process.pop();
         if( link_group.ngram_max_size() <= max_ngram_size || link_group.source_members.length < 2 || link_group.target_members.length < 2 ){

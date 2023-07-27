@@ -1,11 +1,12 @@
- import {recursive_json_load, saveJson} from "../src/json_tools";
-import {ChapterVerse, add_book_alignment_to_wordmap, extract_alignment_frequency, compile_verse_text_pair,
+ import {recursive_json_load } from "./json_tools";
+import {add_book_alignment_to_wordmap,
     convert_tc_to_token_dict, convert_alignment_to_alignment_dict, grade_mapping_method,
     word_map_predict_tokens} from "../src/wordmap_tools";
 import WordMap, {Suggestion,Alignment} from "wordmap";
 import { createWriteStream } from 'fs';
 import {Token} from "wordmap-lexer";
-import {PlaneWordMap, CatBoostWordMap, MorphCatBoostWordMap, FirstLetterBoostWordMap, JLBoostWordMap, JLBoostMultiWordMap, JLBoostMultiWordMap2, MorphJLBoostWordMap } from "../src/boostwordmap_tools";
+import {PlaneWordMap, JLBoostWordMap, JLBoostMultiWordMap, JLBoostMultiWordMap2, MorphJLBoostWordMap } from "../src/boostwordmap_tools";
+import { CatBoostWordMap, FirstLetterBoostWordMap, MorphCatBoostWordMap } from "./boostwordmap_tools_needing_fs";
 
 
 function run_plane_wordmap_test(){

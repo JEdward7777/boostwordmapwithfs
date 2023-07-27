@@ -3,8 +3,8 @@ import WordMap from "wordmap";
 import { Alignment, Ngram, Suggestion, Prediction, Engine } from 'wordmap';
 //import usfmjs from 'usfm-js';
 const usfmjs = require('usfm-js');
-import {JsonDict} from "./json_tools";
 import { Writable } from 'stream';
+import { JsonDict } from "./misc_tools";
 
 
 export class ChapterVerse {
@@ -81,20 +81,20 @@ export function add_book_alignment_to_wordmap( targetBook: { [key: number]: any 
                 }
 
                 for( const a of chapter_alignments[verse].alignments ){
-                    const topTokensNoOccurences: Token[] = a.topWords.map( (word) => {
+                    const topTokensNoOccurrences: Token[] = a.topWords.map( (word) => {
                         const word_copy = Object.assign({}, word);
                         delete word_copy.word;
                         word_copy.text = word.word;
                         return new Token( word_copy ) 
                     });
-                    const bottomTokensNoOccurences: Token[] = a.bottomWords.map( (word) => {
+                    const bottomTokensNoOccurrences: Token[] = a.bottomWords.map( (word) => {
                         const word_copy = Object.assign({}, word);
                         delete word_copy.word;
                         word_copy.text = word.word;
                         return new Token( word_copy ) 
                     });
-                    const topTokens = tokenizeVerseObjects( topTokensNoOccurences );
-                    const bottomTokens = tokenizeVerseObjects( bottomTokensNoOccurences );
+                    const topTokens = tokenizeVerseObjects( topTokensNoOccurrences );
+                    const bottomTokens = tokenizeVerseObjects( bottomTokensNoOccurrences );
 
                     const topNgram: Ngram = new Ngram( topTokens )
                     const bottomNgram: Ngram = new Ngram( bottomTokens )
