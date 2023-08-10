@@ -3,7 +3,7 @@ import {add_book_alignment_to_wordmap, convert_alignment_to_alignment_dict, conv
 import WordMap, {Suggestion,Alignment} from "wordmap";
 import { createWriteStream } from 'fs';
 import {Token} from "wordmap-lexer";
-import { JLBoostMultiWordMap, JLBoostMultiWordMap2, JLBoostWordMap, MorphJLBoostWordMap, PlaneWordMap } from "wordmapbooster/dist/boostwordmap_tools";
+import { AbstractWordMapWrapper, JLBoostWordMap, MorphJLBoostWordMap, PlaneWordMap } from "wordmapbooster/dist/boostwordmap_tools";
 import { CatBoostWordMap, FirstLetterBoostWordMap, MorphCatBoostWordMap } from "./boostwordmap_tools_needing_fs";
 
 
@@ -135,7 +135,7 @@ function loadSourceTargetData_Gen(): SourceTargetData{
 //const boostMap = new CatBoostWordMap({ targetNgramLength: 5, warnings: false });
 //const boostMap = new MorphCatBoostWordMap({ targetNgramLength: 5, warnings: false });
 
-function run_catboost_test_with_alignment_adding_method( data: SourceTargetData, boostMap: PlaneWordMap, number_suffix: string, alignment_adder: (source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }) => Promise<void>){
+function run_catboost_test_with_alignment_adding_method( data: SourceTargetData, boostMap: AbstractWordMapWrapper, number_suffix: string, alignment_adder: (source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }) => Promise<void>){
 
 
     alignment_adder.call( boostMap, data.wm_source_lang_book, data.wm_target_lang_book__train, data.wm_alignment__train ).then(() => {
@@ -165,8 +165,6 @@ function run_catboost_test_with_alignment_adding_method( data: SourceTargetData,
 
 function run_configurable_wordmap_test( alignment_adding_method: number, boost_type: string, lang_selections: string, ratio_of_training_data: number ){
     const boostMap = (boost_type === "morph_jlboost")? new MorphJLBoostWordMap    ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
-                     (boost_type === "jlboost_mwm2" )? new JLBoostMultiWordMap2   ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
-                     (boost_type === "jlboost_mwm" )?  new JLBoostMultiWordMap    ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "jlboost"    )?  new JLBoostWordMap         ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "first_letter")? new FirstLetterBoostWordMap({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "plane"      )?  new PlaneWordMap           ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
@@ -209,9 +207,6 @@ if (require.main === module) {
     //run_configurable_wordmap_test( 2, "jlboost", "greek-english-mat", .9 )
     //run_configurable_wordmap_test( 4, "jlboost", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "jlboost", "heb-english-gen", 1 )
-    //run_configurable_wordmap_test( 2, "jlboost_mwm2", "heb-english-gen", 1 )
-    //run_configurable_wordmap_test( 2, "jlboost_mwm", "greek-spanish-tit", 1 )
-    //run_configurable_wordmap_test( 2, "jlboost_mwm2", "greek-spanish-tit", 1 )
     //run_configurable_wordmap_test( 2, "morph_jlboost", "greek-spanish-tit", 1 )
 
     run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-gen", 1 )

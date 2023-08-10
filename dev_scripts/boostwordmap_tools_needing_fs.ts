@@ -62,7 +62,8 @@ export class CatBoostWordMap extends BoostWordMap{
         this.catboost_model.loadModel( model_file );
     }
 
-    catboost_score( predictions: Prediction[]): Prediction[] { 
+
+    protected model_score(predictions: Prediction[]): void {
         for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
             const input_features_array = scores_to_catboost_features(predictions[prediction_i].getScores());
             //const confidence = this.catboost_model.predict( [input_features_array], [empty_categorical_features] )[0];
@@ -74,7 +75,6 @@ export class CatBoostWordMap extends BoostWordMap{
         //      predictions,
         //      (map as any).engine.alignmentMemoryIndex
         // );
-        return Engine.sortPredictions(predictions);
     }
     
     save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
@@ -186,13 +186,12 @@ function first_letter_prediction_to_catboost_features( prediction: Prediction ):
 
 
 export class FirstLetterBoostWordMap extends CatBoostWordMap{
-    catboost_score( predictions: Prediction[]): Prediction[] { 
+    model_score( predictions: Prediction[]): void { 
         for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
             const [numerical_features,cat_features] = first_letter_prediction_to_catboost_features(predictions[prediction_i]);
             const confidence = this.catboost_model.predict( [numerical_features], [cat_features] )[0];
             predictions[prediction_i].setScore("confidence", confidence);
         }
-        return Engine.sortPredictions(predictions);
     }
 
     save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
@@ -227,13 +226,12 @@ function morph_code_prediction_to_catboost_features( prediction: Prediction ):[n
 
 
 export class MorphCatBoostWordMap extends CatBoostWordMap{
-    catboost_score( predictions: Prediction[]): Prediction[] { 
+    model_score( predictions: Prediction[]): void { 
         for( let prediction_i = 0; prediction_i < predictions.length; ++prediction_i ){
             const [numerical_features,cat_features] = morph_code_prediction_to_catboost_features(predictions[prediction_i]);
             const confidence = this.catboost_model.predict( [numerical_features], [cat_features] )[0];
             predictions[prediction_i].setScore("confidence", confidence);
         }
-        return Engine.sortPredictions(predictions);
     }
 
     save_training_to_json( correct_predictions: Prediction[], incorrect_predictions: Prediction[], filename: string ): void{
