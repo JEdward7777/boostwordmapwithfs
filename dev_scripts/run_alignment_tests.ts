@@ -289,6 +289,99 @@ function loadSourceTargetData_UsfmSource( sourceFilePath: string, targetFilePath
     return data;
 }
 
+
+function tsvParse(fileText: string): any[]{
+    const lines = fileText.split("\n");
+    const headers = lines[0].split("\t");
+    return lines.slice(1).map(line => {
+        const row = line.split("\t");
+        const obj: {[key: string]: string} = {};
+        row.forEach((value, index) => { obj[headers[index]] = value; });
+        return obj;
+    });
+}
+
+function parseBiblicaBibleReference( reference: string ): {book: string, chapter: number, verse: number}{
+    //check if the reference starts with an n.
+    if (reference.startsWith("n")){
+        //Then remove the n and add a suffix zero.
+        reference = reference.substring(1) + "0";
+    }
+    reference = "0".repeat(12 - reference.length) + reference;
+    const bookNum = +reference.substring(0, 2);
+    const chapter = +reference.substring(2, 5);
+    const verse = +reference.substring(5, 8);
+    const book = ["GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", 
+                  "2KI", "1CH", "2CH", "EZR", "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SNG", 
+                  "ISA", "JER", "LAM", "EZK", "DAN", "HOS", "JOL", "AMO", "OBA", "JON", "MIC", 
+                  "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL", "MAT", "MRK", "LUK", "JHN", "ACT", 
+                  "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "TIM", "TIT", 
+                  "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"][bookNum];
+    return {book, chapter, verse};
+}
+
+function convertBiblicaReference( reference: string ): string{
+    const ref = parseBiblicaBibleReference(reference);
+    return `${ref.book} ${ref.chapter}:${ref.verse}`
+}
+
+
+function loadAlignmentsAndCorpusFromBiblicaAlignment( {
+    source_tsv_file, mapping_json_file, target_tsv_file, firstId, lastId } : {
+         source_tsv_file: string, mapping_json_file: string, target_tsv_file:string, firstId: number, lastId: number 
+}): {wm_alignment : { [key: string]: Alignment[] }, wm_source_lang_book  : { [key: string]: Token[] }, wm_target_lang_book : { [key: string]: Token[] } }{
+    
+    const sourceData = tsvParse(fs.readFileSync(source_tsv_file, "utf8"));
+    const targetData = tsvParse(fs.readFileSync(target_tsv_file, "utf8"));
+    const mapping = JSON.parse(fs.readFileSync(mapping_json_file, "utf8"));
+
+    const sourceDataHashed = sourceData.reduce((acc, row) => {
+        acc[row['identifier']] = row;
+        return acc;
+    }, {} as {[key: string]: any});
+    const targetDataHashed = targetData.reduce((acc, row) => {
+        acc[row['identifier']] = row;
+        return acc;
+    }, {} as {[key: string]: any});
+    const reduceToReferencedVerses = (acc: {[key: string]: Token[]}, row: {identifier: string, text: string}): {[key: string]: Token[]} => {
+        //skip if the reference is outside of the requested id range.
+        const targetFormatRef = (row.identifier.startsWith('n'))? row.identifier.substring(1) + "0" : row.identifier;
+        if(+targetFormatRef < firstId || +targetFormatRef > lastId){
+            return acc;
+        }
+        const ref = convertBiblicaReference(row['identifier']);
+        if(!acc[ref]) acc[ref] = [];
+        const tokenArg = {text:row['text']};
+        if (row['strongs']) tokenArg['strong'] = row['strongs'];
+        if (row['lemma'  ]) tokenArg['lemma']  = row['lemma'];
+        if (row['morph'  ]) tokenArg['morph']  = row['morph'];
+        const token = new Token(tokenArg);
+        row['token'] = token;
+        acc[ref].push(token);
+        return acc;
+    }
+    const wm_source_lang_book = sourceData.reduce(reduceToReferencedVerses, {} as {[key: string]: any});
+    const wm_target_lang_book = targetData.reduce(reduceToReferencedVerses, {} as {[key: string]: any});
+    
+    //Now I need to do conversions of the alignment.
+    const wm_alignment = mapping.records.reduce((acc, entry) => {
+        const targetFormatRef = entry.meta.id.split('.')[0] + "0000";
+        if(+targetFormatRef < firstId || +targetFormatRef > lastId){
+            return acc;
+        }
+        const sourceTokens: Token[] = entry.source.map( (i: string): Token => sourceDataHashed[i].token);
+        const targetTokens: Token[] = entry.target.map( (i: string): Token => targetDataHashed[i].token);
+        const verseReference = convertBiblicaReference(targetFormatRef);
+        acc[verseReference] = new Alignment(new Ngram(sourceTokens), new Ngram(targetTokens));
+    });
+
+    return {
+        wm_source_lang_book,
+        wm_target_lang_book,
+        wm_alignment
+    };
+}
+
 function loadSourceTargetData_SpanishRut(): SourceTargetData{
     
     return loadSourceTargetData_UsfmSource( 
@@ -408,6 +501,41 @@ function loadSourceTargetData_Gen_2_Rut(): SourceTargetData{
     data.wm_alignment__test = rutLoaded.alignments;
 
     return data;
+}
+
+function loadSourceTargetData_BiblicaMat() : SourceTargetData{
+    const firstMatId = 400010010011;
+    const lastMatId = 400280200291;
+
+    const matLoaded = loadAlignmentsAndCorpusFromBiblicaAlignment({
+        source_tsv_file  :"/home/lansford/work2/Mission_Mutual/WordMapBoosterWithFs/dev_scripts/data/2024_Biblica_alignments/SBLGNT.tsv",
+        mapping_json_file:"/home/lansford/work2/Mission_Mutual/WordMapBoosterWithFs/dev_scripts/data/2024_Biblica_alignments/SBLGNT-BSB-manual.json",
+        target_tsv_file  :"/home/lansford/work2/Mission_Mutual/WordMapBoosterWithFs/dev_scripts/data/2024_Biblica_alignments/nt_BSB.tsv",
+        firstId:firstMatId,
+        lastId :lastMatId,
+    });
+
+    const splitByChapter14 = ( {train, test}, [reference, thing] ) => {
+        const chapter = +(reference.split( ' ' )[1].split( ':' )[0]);
+        if (chapter <= 14){
+            train[reference] = thing;
+        } else {
+            test[reference] = thing;
+        }
+        return {train, test};
+    }
+
+    //now I need to split matLoaded into source and target passages.
+    const alignmentSplit = Object.entries(matLoaded.wm_alignment).reduce( splitByChapter14, {train:{}, test:{}});
+    const targetSplit = Object.entries(matLoaded.wm_target_lang_book).reduce( splitByChapter14, {train:{}, test:{}});
+
+    return {
+        wm_alignment__train: alignmentSplit.train,
+        wm_alignment__test : alignmentSplit.test,
+        wm_target_lang_book__train: targetSplit.train,
+        wm_target_lang_book__test : targetSplit.test,
+        wm_source_lang_book: matLoaded.wm_source_lang_book,
+    }
 }
 
 function loadSourceTargetData_Gen(): SourceTargetData{
@@ -615,22 +743,23 @@ function run_configurable_wordmap_test( alignment_adding_method: number, boost_t
                                  alignment_adding_method == 3 ?   boostMap.add_alignments_3:
                               /* alignment_adding_method == 4 ?*/ boostMap.add_alignments_4;
 
-    const selected_data = lang_selections == "greek-spanish-tit" ? loadSourceTargetData_SpanishTit():
-                          lang_selections == "greek-english-mat" ? loadSourceTargetData_Mat():
-                          lang_selections == "greek-english-tit" ? loadSourceTargetData_Tit():
-                          lang_selections == "heb-spanish-rut" ? loadSourceTargetData_SpanishRut():
-                          lang_selections == "heb-english-rut" ? loadSourceTargetData_Rut():
-                          lang_selections == "greek-english-mat-2-tit" ? loadSourceTargetData_Mat_2_Tit():
+    const selected_data = lang_selections == "greek-spanish-tit"                ? loadSourceTargetData_SpanishTit():
+                          lang_selections == "greek-english-mat"                ? loadSourceTargetData_Mat():
+                          lang_selections == "greek-english-tit"                ? loadSourceTargetData_Tit():
+                          lang_selections == "heb-spanish-rut"                  ? loadSourceTargetData_SpanishRut():
+                          lang_selections == "heb-english-rut"                  ? loadSourceTargetData_Rut():
+                          lang_selections == "greek-english-mat-2-tit"          ? loadSourceTargetData_Mat_2_Tit():
                           lang_selections == "greek-spanish-3JN_n_Tit12_2_Tit3" ? loadSourceTargetData_Spanish3JN_n_Tit12_2_Tit3():
-                          lang_selections == "heb-english-gen" ? loadSourceTargetData_Gen():
-                          lang_selections == "heb-english-gen-2-rut" ? loadSourceTargetData_Gen_2_Rut():
-                                                                undefined;
-                       
+                          lang_selections == "heb-english-gen"                  ? loadSourceTargetData_Gen():
+                          lang_selections == "heb-english-gen-2-rut"            ? loadSourceTargetData_Gen_2_Rut():
+                          lang_selections == "biblica-greek-english-mat"        ? loadSourceTargetData_BiblicaMat():
+                                                                                  undefined;
+
 
     //tokens need location information.  Who would have thunk it?
-    Object.values(selected_data.wm_source_lang_book).forEach( tokens => updateTokenLocations(tokens) );
+    Object.values(selected_data.wm_source_lang_book       ).forEach( tokens => updateTokenLocations(tokens) );
     Object.values(selected_data.wm_target_lang_book__train).forEach( tokens => updateTokenLocations(tokens) );
-    Object.values(selected_data.wm_target_lang_book__test).forEach( tokens => updateTokenLocations(tokens) );
+    Object.values(selected_data.wm_target_lang_book__test ).forEach( tokens => updateTokenLocations(tokens) );
 
     let csv_code : string = `${alignment_adding_method}_${boost_type}_${lang_selections}`;
 
@@ -691,6 +820,7 @@ if (require.main === module) {
     //run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-gen-2-rut", 1, true )
 
     //run_configurable_wordmap_test( 2, "eflomal", "greek-spanish-tit", 1, true );
-    run_configurable_wordmap_test( 2, "eflomal", "greek-english-mat", 1, true );
+    //run_configurable_wordmap_test( 2, "eflomal", "greek-english-mat", 1, true );
     //run_configurable_wordmap_test( 2, "eflomal", "heb-english-gen", 1, true );
+    run_configurable_wordmap_test( 2, "morph_jlboost", "biblica-greek-english-mat", 1, true );
 }
