@@ -5,7 +5,7 @@ import { WriteStream, createWriteStream } from 'fs';
 import * as fs from "fs";
 import {Token} from "wordmap-lexer";
 import { AbstractWordMapWrapper, JLBoostWordMap, MorphJLBoostWordMap, PlaneWordMap } from "wordmapbooster/dist/boostwordmap_tools";
-import { CatBoostWordMap, FirstLetterBoostWordMap, MorphCatBoostWordMap } from "./boostwordmap_tools_needing_fs";
+import { CatBoostWordMap, EflomalMap, FirstLetterBoostWordMap, MorphCatBoostWordMap } from "./boostwordmap_tools_needing_fs";
 // @ts-ignore
 import { toJSON as usfm_toJSON } from "usfm-js";
 
@@ -86,7 +86,7 @@ function loadSourceTargetData_Mat(): SourceTargetData{
     return data;
 }
 
-function loadSourceTargetData_Tit(): SourceTargetData{
+export function loadSourceTargetData_Tit(): SourceTargetData{
     const tc_alignment = recursive_json_load( "/home/lansford/translationCore/projects/en_ult_tit_book/.apps/translationCore/alignmentData/tit")
 
     //here is Titus
@@ -535,27 +535,29 @@ function grade_highlighting_method(
 //const boostMap = new CatBoostWordMap({ targetNgramLength: 5, warnings: false });
 //const boostMap = new MorphCatBoostWordMap({ targetNgramLength: 5, warnings: false });
 
-function run_catboost_test_with_alignment_adding_method( data: SourceTargetData, boostMap: AbstractWordMapWrapper, number_suffix: string, alignment_adder: (source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }) => Promise<void>, use_corpus: boolean){
+function run_catboost_test_with_alignment_adding_method( data: SourceTargetData, boostMap: AbstractWordMapWrapper | EflomalMap, number_suffix: string, alignment_adder: (source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }) => Promise<void>, use_corpus: boolean){
 
     //If this test uses corpus, then add all the corpus.  Test and train.  
     //The reason we use test along with the train is that in the use case scenario which we
     //care about we can use the unaligned data as corpus as well.
     if( use_corpus ){
-        const sourceTokens : Token[][] = [];
-        const targetTokens : Token[][] = [];
-        Object.entries(data.wm_target_lang_book__test!).forEach( ([verseKey, verseTokens]: [string, Token[]]) => {
-            if( verseKey in data.wm_source_lang_book ){
-                targetTokens.push( verseTokens );
-                sourceTokens.push( data.wm_source_lang_book[verseKey] );
-            }
-        });
-        Object.entries(data.wm_target_lang_book__train!).forEach( ([verseKey, verseTokens]: [string, Token[]]) => {
-            if( verseKey in  data.wm_source_lang_book ){
-                targetTokens.push( verseTokens );
-                sourceTokens.push( data.wm_source_lang_book[verseKey] );
-            }
-        });
-        boostMap.appendCorpusTokens( sourceTokens, targetTokens );
+        // const sourceTokens : Token[][] = [];
+        // const targetTokens : Token[][] = [];
+        // Object.entries(data.wm_target_lang_book__test!).forEach( ([verseKey, verseTokens]: [string, Token[]]) => {
+        //     if( verseKey in data.wm_source_lang_book ){
+        //         targetTokens.push( verseTokens );
+        //         sourceTokens.push( data.wm_source_lang_book[verseKey] );
+        //     }
+        // });
+        // Object.entries(data.wm_target_lang_book__train!).forEach( ([verseKey, verseTokens]: [string, Token[]]) => {
+        //     if( verseKey in  data.wm_source_lang_book ){
+        //         targetTokens.push( verseTokens );
+        //         sourceTokens.push( data.wm_source_lang_book[verseKey] );
+        //     }
+        // });
+        // boostMap.appendCorpusTokens( sourceTokens, targetTokens );
+        boostMap.appendKeyedCorpusTokens( data.wm_source_lang_book, data.wm_target_lang_book__test );
+        boostMap.appendKeyedCorpusTokens( data.wm_source_lang_book, data.wm_target_lang_book__train );
     }
 
     alignment_adder.call( boostMap, data.wm_source_lang_book, data.wm_target_lang_book__train, data.wm_alignment__train ).then(() => {
@@ -596,7 +598,8 @@ function run_catboost_test_with_alignment_adding_method( data: SourceTargetData,
 }
 
 function run_configurable_wordmap_test( alignment_adding_method: number, boost_type: string, lang_selections: string, ratio_of_training_data: number, use_corpus: boolean = false ){
-    const boostMap = (boost_type === "morph_jlboost")? new MorphJLBoostWordMap    ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
+    const boostMap = (boost_type === "eflomal"    )?  new EflomalMap              ():
+                     (boost_type === "morph_jlboost")? new MorphJLBoostWordMap   ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "jlboost"    )?  new JLBoostWordMap         ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "first_letter")? new FirstLetterBoostWordMap({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
                      (boost_type === "plane"      )?  new PlaneWordMap           ({ targetNgramLength: 5, warnings: false, forceOccurrenceOrder:false }):
@@ -675,7 +678,7 @@ if (require.main === module) {
     //run_configurable_wordmap_test( 4, "morph_jlboost", "greek-english-tit", 1, true )
 
 
-    run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-gen", 1, true )
+    //run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-gen", 1, true )
     //run_configurable_wordmap_test( 2, "morph_jlboost", "heb-spanish-rut", 1, true )
     //run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-rut", 1, true )
 
@@ -686,4 +689,8 @@ if (require.main === module) {
     //run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-rut", 1, true )
 
     //run_configurable_wordmap_test( 2, "morph_jlboost", "heb-english-gen-2-rut", 1, true )
+
+    //run_configurable_wordmap_test( 2, "eflomal", "greek-spanish-tit", 1, true );
+    run_configurable_wordmap_test( 2, "eflomal", "greek-english-mat", 1, true );
+    //run_configurable_wordmap_test( 2, "eflomal", "heb-english-gen", 1, true );
 }

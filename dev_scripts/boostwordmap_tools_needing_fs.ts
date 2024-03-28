@@ -1,11 +1,16 @@
-import { BoostWordMap, catboost_feature_order, morph_code_catboost_cat_feature_order, morph_code_prediction_to_feature_dict } from "wordmapbooster/dist/boostwordmap_tools";
+import { AbstractWordMapWrapper, BoostWordMap, catboost_feature_order, morph_code_catboost_cat_feature_order, morph_code_prediction_to_feature_dict } from "wordmapbooster/dist/boostwordmap_tools";
 import * as catboost from "catboost";
-import { Prediction, Engine } from 'wordmap';
-import {Token} from "wordmap-lexer";
+import { Prediction, Engine, Alignment, Suggestion, Ngram } from 'wordmap';
+import Lexer, {Token} from "wordmap-lexer";
 import { saveJson } from "./json_tools";
 import { listToDictOfLists } from "wordmapbooster/dist/misc_tools";
 import * as path from 'path';
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import { find_token } from "./eflomal_tests/alignment_to_eflomal_output_format";
+import { run_eflomal_align, run_eflomal_make_priors } from "./eflomal_tests/eflomal_runner";
+import { updateTokenLocations } from "wordmapbooster/dist/wordmap_tools";
+import assert = require("assert");
 
 /**
  * Runs the CatBoost training process.
@@ -252,4 +257,238 @@ export class MorphCatBoostWordMap extends CatBoostWordMap{
             "training_data": listToDictOfLists(training_data),
         },  filename);
     }
+}
+
+export class EflomalMap{
+
+    readonly exported_corpus_filename = "./dev_scripts/eflomal_tests/exported_corpus.txt";
+    readonly exported_alignments_filename = "./dev_scripts/eflomal_tests/exported_alignments.txt";
+    readonly exported_priors_filename = "./dev_scripts/eflomal_tests/exported_priors.txt";
+
+    readonly alignments_output_forward_filename = "./dev_scripts/eflomal_tests/alignments_output_forward.txt";
+    readonly alignments_output_backward_filename = "./dev_scripts/eflomal_tests/alignments_output_backward.txt";
+
+    readonly alignment_output_scores_forward_filename = "./dev_scripts/eflomal_tests/alignment_output_scores_forward.txt";
+    readonly alignment_output_scores_backward_filename = "./dev_scripts/eflomal_tests/alignment_output_scores_backward.txt";
+
+    //This isn't used during generating the priors but during the prediction.
+    private corpus_source: {[key: string]: Token[]};
+    private corpus_target: {[key: string]: Token[]};
+
+
+    async add_alignments( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{
+        this.appendKeyedCorpusTokens( source_text, target_text );
+
+
+        //generate a corpus file and an alignment file for eflomal to generate priors from.
+        const output_corpus_file = fs.openSync(this.exported_corpus_filename, "w");
+        const output_alignment_file = fs.openSync(this.exported_alignments_filename, "w");
+
+        //write the data to the output file.
+        //Iterate through all the keys available in output_file.wm_target_lang_book__train and then
+        //write the value for that and the associated value from wm_source_lang_book to the file separated by |||
+        for (const [reference, target_verse] of Object.entries(target_text)) {
+            //check if the key is in wm_source_lang_book
+            if (Object.keys(source_text).includes(reference)) {
+                const source_verse = source_text[reference];
+
+                //Join all the entries in target_verse into a single string separated by spaces.
+                const target_verse_string = target_verse.join(" ");
+                const source_verse_string = source_verse.join(" ");
+
+
+                //write the value to the file
+                fs.writeSync(output_corpus_file, source_verse_string + " ||| " + target_verse_string + "\n");
+
+
+
+                //Now write the result for the alignment
+                const these_alignments = alignments[reference];
+                these_alignments.forEach( alignment => {
+                    alignment.sourceNgram.getTokens().forEach( source_token => {
+                        const source_index = find_token( source_token, source_verse );
+                        if( source_index !== -1 ){
+                            alignment.targetNgram.getTokens().forEach( target_token => {
+                                const target_index = find_token( target_token, target_verse );
+                                if( target_index !== -1 ){
+                                    fs.writeSync(output_alignment_file, `${source_index}-${target_index} `);                                
+                                }
+                            })
+                        }
+                    })
+                })
+
+                fs.writeSync(output_alignment_file, "\n");
+        
+            }
+        }
+
+        //close all the files
+        fs.closeSync(output_corpus_file);
+        fs.closeSync(output_alignment_file);
+
+        //Now run the eflomal command to generate the priors
+        await run_eflomal_make_priors( this.exported_corpus_filename, this.exported_alignments_filename, this.exported_priors_filename );
+
+        return;
+    }
+
+    public appendKeyedCorpusTokens( sourceTokens: {[key:string]: Token[]}, targetTokens: {[key:string]: Token[]}){
+        //Add all of sourceTokens to corpus_source
+        this.corpus_source = { ...this.corpus_source, ...sourceTokens };
+        //Add all of targetTokens to corpus_target
+        this.corpus_target = { ...this.corpus_target, ...targetTokens };
+    }
+
+
+    predict(sourceSentence: string | Token[], targetSentence: string | Token[], maxSuggestions?: number, manuallyAligned: Alignment[] = []): Suggestion[]{
+        let sourceTokens = [];
+        let targetTokens = [];
+
+        if (typeof sourceSentence === "string") {
+            sourceTokens = Lexer.tokenize(sourceSentence);
+        } else {
+            sourceTokens = sourceSentence;
+        }
+
+        if (typeof targetSentence === "string") {
+            targetTokens = Lexer.tokenize(targetSentence);
+        } else {
+            targetTokens = targetSentence;
+        }
+
+
+        updateTokenLocations( sourceTokens );
+        updateTokenLocations( targetTokens );
+
+        //need to write this to an output file to feed to eflomal
+        const output_file = fs.openSync(this.exported_corpus_filename, "w");
+        fs.writeSync(output_file, sourceTokens.join(" ") + " ||| " + targetTokens.join(" ") + "\n");
+
+        //now append all the corpus information as well.
+        for (const [reference, target_verse] of Object.entries(this.corpus_target)) {
+            //check if the key is in wm_source_lang_book
+            if (Object.keys(this.corpus_source).includes(reference)) {
+                const source_verse = this.corpus_source[reference];
+
+                //Join all the entries in target_verse into a single string separated by spaces.
+                const target_verse_string = target_verse.join(" ");
+                const source_verse_string = source_verse.join(" ");
+
+
+                //write the value to the file
+                fs.writeSync(output_file, source_verse_string + " ||| " + target_verse_string + "\n");
+            }
+        }
+
+        //close the files
+        fs.closeSync(output_file);
+
+        //Now run the eflomal command while referencing the prior file.
+        run_eflomal_align( this.exported_corpus_filename, this.exported_priors_filename, this.alignments_output_forward_filename, this.alignments_output_backward_filename, this.alignment_output_scores_forward_filename, this.alignment_output_scores_backward_filename );
+
+        //Now need to read in the first line of both of those alignment files, merge them and return them as suggestions.
+        //TODO: need to implement the rest of this. 
+        //This is tricky because if we get 0-1 and 1-1 and 1-2 that means 0-2 is a thing by transitivity, so I basically am going to need to build a
+        //membership map.
+
+        //first do a map
+        const id_to_leader_id: {[key: string]: string} = {};
+        const get_leader_id = function( id: string ): string{
+            if( !id_to_leader_id[id] ) id_to_leader_id[id] = id;
+            const leader_id = (id_to_leader_id[id] == id) ? id : get_leader_id( id_to_leader_id[id] );
+            id_to_leader_id[id] = leader_id;
+            return leader_id;
+        }
+        const join_groups = function( id1: string, id2: string ){
+            id_to_leader_id[get_leader_id(id1)] = get_leader_id(id2);
+        }
+        
+        // const first_line_mappings = fs.readFileSync( this.alignments_output_forward_filename, "utf8" ).split( "\n" )[0] + " " +
+        //                     fs.readFileSync( this.alignments_output_backward_filename, "utf8" ).split( "\n" )[0];
+        const first_line_mappings = fs.readFileSync( this.alignments_output_backward_filename, "utf8" ).split( "\n" )[0];
+
+        first_line_mappings.split( " " ).forEach( pair => {
+            const source_id = pair.split( "-" )[0];
+            const target_id = pair.split( "-" )[1];
+            join_groups( `s${source_id}`, `t${target_id}` );
+        });
+
+        //get the score for the first alignment by reading the first line of the forward and backwards scores file and averaging them together.
+        // const first_line_score_forward = parseFloat(fs.readFileSync( this.alignment_output_scores_forward_filename, "utf8" ).split( "\n" )[0]);
+        const first_line_score_backward = parseFloat(fs.readFileSync( this.alignment_output_scores_backward_filename, "utf8" ).split( "\n" )[0]);
+        // const alignment_score = (first_line_score_forward + first_line_score_backward)/2;
+        const alignment_score = first_line_score_backward;
+
+        //then convert that into lists.
+        const leader_id_to_attendance: {[key: string]: {source_indexes: number[], target_indexes: number[]}} = {};
+        Object.keys( id_to_leader_id ).forEach( member_id => {
+            const leader_id = get_leader_id(member_id);
+            //check if that leader_id is already in leader_id_to_attendance
+            if( !(leader_id in leader_id_to_attendance) ){
+                leader_id_to_attendance[leader_id] = {source_indexes: [], target_indexes: []};
+            }
+            //split off the s or t
+            const s_or_t = member_id[0];
+            //take everything after the first char which is s or t
+            const member_number = parseInt(member_id.substring(1));
+            if( s_or_t === "s" ){
+                leader_id_to_attendance[leader_id].source_indexes.push( member_number );
+            }else{
+                leader_id_to_attendance[leader_id].target_indexes.push( member_number );
+            }
+        })
+        
+        //we now have all the memberships, so dump the dictionary out into a list and sort it by the lowest target index.
+        const membershipList = Object.values(leader_id_to_attendance);
+        
+        // Sort the list by the lowest target index
+        membershipList.sort((a, b) => {
+          const lowestTargetIndexA = Math.min(1e10,...a.target_indexes);
+          const lowestTargetIndexB = Math.min(1e10,...b.target_indexes);
+          return lowestTargetIndexA - lowestTargetIndexB;
+        });
+
+        // Now also sort the members in the index.
+        membershipList.forEach((membership) => {
+          membership.source_indexes.sort((a, b) => a - b);
+          membership.target_indexes.sort((a, b) => a - b);
+        });
+
+
+        //then convert that into alignment objects.
+        const convertedAlignment = membershipList.map( (membership) => {
+            const sourceNgram = new Ngram( membership.source_indexes.map( token_index => sourceTokens[token_index] ));
+            const targetNgram = new Ngram( membership.target_indexes.map( token_index => targetTokens[token_index] ));
+            const alignment = new Alignment( sourceNgram, targetNgram );
+            return alignment;
+        });
+
+        //wrap as predictions.
+        const predictions = convertedAlignment.map( alignment => {
+            const as_prediction = new Prediction( alignment );
+            
+            //set the confidence for all the alignments to the confidence of the entire sentence because that is what is
+            //available.  Also it shouldn't be > 1 but again that is what we have.
+            as_prediction.setScore("confidence", alignment_score);
+
+            return as_prediction;
+        });
+
+        //and wrap it in a Suggestion object.
+        const suggestion = new Suggestion();
+        predictions.forEach( prediction => suggestion.addPrediction( prediction ) );
+
+        //We can only create one suggestion so hopefully the calling code won't be offended.
+        return [suggestion];
+    }
+
+    //Eflomal doesn't have four different ways of adding, but adding these just for compatibility.
+    add_alignments_1( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{ return this.add_alignments( source_text, target_text, alignments ); }
+    add_alignments_2( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{ return this.add_alignments( source_text, target_text, alignments ); }
+    add_alignments_3( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{ return this.add_alignments( source_text, target_text, alignments ); }
+    add_alignments_4( source_text: {[key: string]: Token[]}, target_text: {[key: string]: Token[]}, alignments: {[key: string]: Alignment[] }):Promise<void>{ return this.add_alignments( source_text, target_text, alignments ); }
+    //Not needed, but including it for compatibility with the other models which need this.
+    setTrainingRatio( ratio: number ){}
+
 }
