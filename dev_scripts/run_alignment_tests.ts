@@ -1,7 +1,7 @@
 import {recursive_json_load } from "./json_tools";
 import {add_book_alignment_to_wordmap, convert_alignment_to_alignment_dict, convert_tc_to_token_dict, grade_mapping_method, token_to_hash, updateTokenLocations, word_map_predict_tokens} from "wordmapbooster/dist/wordmap_tools";
 import WordMap, {Suggestion,Alignment, Ngram} from "wordmap";
-import { WriteStream, createWriteStream } from 'fs';
+import { WriteStream, createWriteStream, writeFileSync } from 'fs';
 import * as fs from "fs";
 import {Token} from "wordmap-lexer";
 import { AbstractWordMapWrapper, JLBoostWordMap, MorphJLBoostWordMap, PlaneWordMap } from "wordmapbooster/dist/boostwordmap_tools";
@@ -292,7 +292,7 @@ function loadSourceTargetData_UsfmSource( sourceFilePath: string, targetFilePath
 
 function tsvParse(fileText: string): any[]{
     const lines = fileText.split("\n");
-    const headers = lines[0].split("\t");
+    const headers = lines[0].split("\t").map(header => header.trim());
     return lines.slice(1).map(line => {
         const row = line.split("\t");
         const obj: {[key: string]: string} = {};
@@ -316,7 +316,7 @@ function parseBiblicaBibleReference( reference: string ): {book: string, chapter
                   "ISA", "JER", "LAM", "EZK", "DAN", "HOS", "JOL", "AMO", "OBA", "JON", "MIC", 
                   "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL", "MAT", "MRK", "LUK", "JHN", "ACT", 
                   "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "TIM", "TIT", 
-                  "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"][bookNum];
+                  "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"][bookNum-1];
     return {book, chapter, verse};
 }
 
@@ -352,12 +352,17 @@ function loadAlignmentsAndCorpusFromBiblicaAlignment( {
         const ref = convertBiblicaReference(row['identifier']);
         if(!acc[ref]) acc[ref] = [];
         const tokenArg = {text:row['text']};
-        if (row['strongs']) tokenArg['strong'] = row['strongs'];
-        if (row['lemma'  ]) tokenArg['lemma']  = row['lemma'];
-        if (row['morph'  ]) tokenArg['morph']  = row['morph'];
+        if (row['strongs']) tokenArg['strong'] = row['strongs'].trim();
+        if (row['lemma'  ]) tokenArg['lemma']  = row['lemma'].trim();
+        if (row['morph'  ]) tokenArg['morph']  = row['morph'].trim();
+        tokenArg['biblica_id'] = row['identifier'];
         const token = new Token(tokenArg);
         row['token'] = token;
-        acc[ref].push(token);
+        //Go ahead and convert the tokens which are punctuation, but don't keep them in the
+        //collected lists.
+        if( (row['isPunc']?.toLowerCase()?.[0]) !== "t" ){
+            acc[ref].push(token);
+        }
         return acc;
     }
     const wm_source_lang_book = sourceData.reduce(reduceToReferencedVerses, {} as {[key: string]: any});
@@ -371,9 +376,11 @@ function loadAlignmentsAndCorpusFromBiblicaAlignment( {
         }
         const sourceTokens: Token[] = entry.source.map( (i: string): Token => sourceDataHashed[i].token);
         const targetTokens: Token[] = entry.target.map( (i: string): Token => targetDataHashed[i].token);
-        const verseReference = convertBiblicaReference(targetFormatRef);
-        acc[verseReference] = new Alignment(new Ngram(sourceTokens), new Ngram(targetTokens));
-    });
+        const ref = convertBiblicaReference(targetFormatRef);
+        if(!acc[ref]) acc[ref] = [];
+        acc[ref].push( new Alignment(new Ngram(sourceTokens), new Ngram(targetTokens)) );
+        return acc;
+    }, {} as {[key: string]: Alignment[]});
 
     return {
         wm_source_lang_book,
@@ -504,7 +511,7 @@ function loadSourceTargetData_Gen_2_Rut(): SourceTargetData{
 }
 
 function loadSourceTargetData_BiblicaMat() : SourceTargetData{
-    const firstMatId = 400010010011;
+    const firstMatId = 400010010000;
     const lastMatId = 400280200291;
 
     const matLoaded = loadAlignmentsAndCorpusFromBiblicaAlignment({
@@ -658,6 +665,86 @@ function grade_highlighting_method(
     });
 }
 
+function generate_suggested_alignments_in_biblica_format( data: SourceTargetData, 
+        predict_method: ( from_tokens: Token[], to_tokens: Token[] ) => Suggestion[] ): any{
+
+    const records = [];
+    
+    Object.keys( data.wm_target_lang_book__test).forEach( verseKey => {
+        if( verseKey in data.wm_source_lang_book ){
+            const targetTokens = data.wm_target_lang_book__test[verseKey];
+            const sourceTokens = data.wm_source_lang_book[verseKey];
+
+            const suggestion : Suggestion = predict_method( sourceTokens, targetTokens )[0];
+
+            const token_to_id = (token:Token):string => {
+                if( token.meta.biblica_id ){
+                    return token.meta.biblica_id;
+                }
+                return `${verseKey}-${token_to_hash( token )}`;
+            }
+
+            let isBiblicaCode = false;
+            let alignmentIdPrefix = undefined;
+            
+            if( targetTokens.length > 0 ){
+                if( targetTokens[0].meta.biblica_id ){
+                    isBiblicaCode = true;
+                    alignmentIdPrefix = targetTokens[0].meta.biblica_id;
+                }else{
+                    isBiblicaCode = false;
+                    alignmentIdPrefix = `${verseKey}-`;
+                }
+            }else if( sourceTokens.length > 0 ){
+                if( sourceTokens[0].meta.biblica_id ){
+                    isBiblicaCode = true;
+                    alignmentIdPrefix = sourceTokens[0].meta.biblica_id;
+                }else{
+                    isBiblicaCode = false;
+                    alignmentIdPrefix = `${verseKey}-`;
+                }
+            }
+            if( isBiblicaCode ){
+                //remove an n prefix if it exists on alignmentIdPrefix.
+                if( alignmentIdPrefix.startsWith("n") ) alignmentIdPrefix = alignmentIdPrefix.slice(1);
+                //now take only the first 8 digits.
+                alignmentIdPrefix = alignmentIdPrefix.slice(0,8);
+                //now suffix on a period
+                alignmentIdPrefix = alignmentIdPrefix + ".";
+            }
+
+
+
+            suggestion.getPredictions().forEach( (prediction,index) => {
+                //create alignmentId with alignmentIdPrefix and a three digit number based in index
+                const alignmentId = `${alignmentIdPrefix}${(index+1).toString().padStart(3,"0")}`
+                
+                const newRecord = {
+                    "source": prediction.alignment.sourceNgram.getTokens().map( token_to_id ),
+                    "target": prediction.alignment.targetNgram.getTokens().map( token_to_id ),
+                    "confidence": prediction.confidence,
+                    "meta":{
+                        "id": alignmentId,
+                        "process": "automatic",
+                    }
+                }
+                records.push( newRecord );
+            });
+        }
+    })
+    return {
+        documents:[
+            //TODO: This shouldn't be hard coded here.
+            {docid: "SBLGNT", scheme: "BCVWP"},
+            {docid: "BSB"   , scheme: "BCVWP"},
+        ],
+        meta: {conformsTo: "0.3", creator: "WordMapBooster"},
+        roles: ["source", "target"],
+        type: "translation",
+        records: records
+    }
+}
+
 
 
 //const boostMap = new CatBoostWordMap({ targetNgramLength: 5, warnings: false });
@@ -720,6 +807,10 @@ function run_catboost_test_with_alignment_adding_method( data: SourceTargetData,
             predict_method, //mapping_function
         )
         output_csv2.end();
+
+        const suggested_alignments_in_biblica_alignment_format = generate_suggested_alignments_in_biblica_format(data,predict_method);
+        //write out to json file.
+        writeFileSync( `dev_scripts/data/suggested_alignments_${number_suffix}${use_corpus?"_with_corpus":""}.json`, JSON.stringify( suggested_alignments_in_biblica_alignment_format, null, 2 ) );
 
         console.log( "done" );
     });
